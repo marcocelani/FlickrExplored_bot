@@ -1,0 +1,27 @@
+{
+  "name": "flickrexplored_bot",
+  "version": "0.0.1",
+  "description": "FlickrExplored Bot shows random Flickr's explored images.",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcocelani/FlickrExplored_bot.git"
+  },
+  "keywords": [
+    "nodejs",
+    "telegram",
+    "bot"
+  ],
+  "author": "Marco Celani",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/marcocelani/FlickrExplored_bot/issues"
+  },
+  "homepage": "https://github.com/marcocelani/FlickrExplored_bot#readme",
+  "dependencies": {
+    "telebot": "^1.2.2"
+  }
+}
