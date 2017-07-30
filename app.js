@@ -12,7 +12,7 @@ const flickrObj = {
     METHODS     : ['flickr.interestingness.getList', 'flickr.people.getInfo'],
     API_KEY     : config.FLICKR_KEY,
     EXTRAS      : 'path_alias,',
-    PER_PAGE    : 500, /* Flickr max default */ 
+    PER_PAGE    : 1, /* Flickr max default: 500 */
     FORMAT      : 'json',
     NOJSONCB    : 1,
 };
@@ -65,6 +65,7 @@ var getPhoto = function(msg){
                         api_key: flickrObj.API_KEY,
                         //extras: flickrObj.EXTRAS,
                         per_page: flickrObj.PER_PAGE,
+                        page: getRandomic(499),
                         format: flickrObj.FORMAT,
                         nojsoncallback: flickrObj.NOJSONCB
                     },
@@ -81,7 +82,7 @@ var getPhoto = function(msg){
                         cb(new Error('Sorry, no photos were found.'));
                         return;
                     }
-                    cb(null, response.photos.photo[getRandomic(flickrObj.PER_PAGE)])   
+                    cb(null, response.photos.photo[0])   
                 })
                 .catch( err => {
                     console.log('err:', err);
