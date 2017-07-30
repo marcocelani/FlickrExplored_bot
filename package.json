@@ -22,6 +22,9 @@
   },
   "homepage": "https://github.com/marcocelani/FlickrExplored_bot#readme",
   "dependencies": {
+    "async": "^2.5.0",
+    "request": "^2.81.0",
+    "request-promise": "^4.2.1",
     "telebot": "^1.2.2"
   }
 }
