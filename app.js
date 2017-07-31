@@ -2,6 +2,7 @@ const TeleBot = require('telebot');
 const config = require('./config.js').config;
 const rp = require('request-promise');
 const async = require('async');
+const htmlparser = require('htmlparser2');
 
 const bot = new TeleBot({
     token: config.BOT_TOKEN
@@ -9,7 +10,7 @@ const bot = new TeleBot({
 
 const flickrObj = {
     ENDPOINT    : 'https://api.flickr.com/services/rest/',
-    METHODS     : ['flickr.interestingness.getList', 'flickr.people.getInfo'],
+    METHODS     : ['flickr.interestingness.getList', 'flickr.people.getInfo', 'flickr.photos.getInfo'],
     API_KEY     : config.FLICKR_KEY,
     EXTRAS      : 'path_alias,',
     PER_PAGE    : 1, /* Flickr max default: 500 */
@@ -126,8 +127,106 @@ var getPhoto = function(msg){
         }
     )};
 
+var getPhotoV2 = function(msg){
+    let imgs = [];
+    let parser = new htmlparser.Parser(
+        {
+            onopentag: (name, attribs) => {
+                if(name === 'div' 
+                    && attribs.style)
+                {
+                    let tokens = attribs.style.split(':');
+                    for(let i=0; i<tokens.length; ++i){
+                        let token = tokens[i].trim();
+                        if(token.includes('url')
+                            && token.length > 4)
+                        {
+                            let img_url = token.substring(4, token.length - 1);
+                            if(img_url.endsWith('.jpg')
+                                || img_url.endsWith('.JPG'))
+                            {
+                                let img = img_url.split('/');
+                                if(img.length == 0) {
+                                    console.log('img has no length.');
+                                    return;
+                                }
+                                img = img[img.length-1];
+                                let img_id = img.split('_');
+                                if(img_id.length == 0){
+                                    console.log('img_id has no length.');
+                                    return;
+                                }
+                                imgs.push(img_id[0]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    );
+
+    async.waterfall([
+        cb => {
+            rp('https://www.flickr.com/explore')
+            .then( html => {
+                parser.write(html);
+                parser.end();
+                if(imgs.length > 0 ){
+                    let picked_id = imgs[getRandomic(imgs.length-1)];
+                    cb(null, picked_id);
+                } else {
+                    msg.reply.text('Sorry, no images found.');
+                    cb(new Error());
+                }
+            })
+            .catch( err => {
+                console.log(err);
+                cb(err);
+            });
+        },
+        (img_id, cb) => {
+            rpOpt = {
+                uri: flickrObj.ENDPOINT,
+                qs: {
+                    method: flickrObj.METHODS[2],
+                    api_key: flickrObj.API_KEY,
+                    photo_id: img_id,
+                    format: flickrObj.FORMAT,
+                    nojsoncallback: flickrObj.NOJSONCB,
+                },
+                json: true
+            };
+
+            rp(rpOpt)
+            .then( response => {
+                if(response.photo
+                    && response.photo.urls
+                    && response.photo.urls.url 
+                    && response.photo.urls.url[0]
+                    && response.photo.urls.url[0]._content)
+                    cb(null, response.photo.urls.url[0]._content);
+                else {
+                    cb(new Error('Sorry, wrong object.'));
+                }
+            })
+            .catch( err => {
+                console.log(err);
+                cb(err);
+            });   
+        }
+    ], (err, result) => {
+        if(err){
+            console.log(err.message);
+            msg.reply.text(`Something goes wrong.`);
+        }
+         else {
+             msg.reply.text(result);
+         }
+    });
+};
+
 bot.on(['/start'], (msg) =>  msg.reply.text(getWelcome(msg.from.first_name)));
-bot.on(['/photo'], (msg) => getPhoto(msg) );
+bot.on(['/photo'], (msg) => getPhotoV2(msg) );
 bot.on('/help', (msg) => msg.reply.text(usage()));
 bot.on('/about', (msg) => msg.reply.text(about()));
 bot.start();
