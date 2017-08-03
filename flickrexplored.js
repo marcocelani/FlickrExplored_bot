@@ -39,8 +39,8 @@ Type /about for show info.`;
 };
 
 var getWelcome = function(firstName) {
-   return `Welcome ${(firstName) ? firstName : 'user'}!
-My mission is to show you the most Flickr's interesting photos in a randomic way.
+   return `Welcome ${(firstName) ? firstName : ''}!
+My mission is to show you Flickr's Explored photos in a randomic way.
 ${usage()}`;
 };
 
@@ -171,6 +171,7 @@ var scrapeImg = function() {
             function(err, result){  
                 if(err){
                     logErr(`Something goes wrong:${err.message}.`);
+                    imgsObj.scrapeInProgress = false;
                     return;
                 }
                 logInfo(`tasksArr ended.`);
