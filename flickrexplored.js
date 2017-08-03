@@ -48,9 +48,13 @@ ${usage()}`;
 var getRandomic = function(upperBound){
     if(upperBound && typeof(upperBound) !== 'number')
         return 0;
-    let min = 0;
+    let min = 0; //choose your lowerBound if you want.
     let max = Math.floor(upperBound);
     return Math.floor(Math.random() * (max - min)) + min;
+};
+
+var replyError = function(msg){
+    msg.reply.text(`Something goes wrong.`);
 };
 
 var getMsgError = function(response){
@@ -190,8 +194,26 @@ var getPhotoV2 = function(msg){
         logErr(`imgs is empty`);
         return;
     }
-    var imgsIds = imgsObj.imgs[getRandomic(imgsObj.imgs.length - 1)];
-    var img_id = imgsIds.imgsArr[getRandomic(imgsIds.imgsArr.length - 1)]
+
+    let imgsIds;
+    let img_id;
+    if(imgsObj.imgs.length > 0){
+        imgsIds = imgsObj.imgs[getRandomic(imgsObj.imgs.length - 1)];
+        if(imgsIds.imgsArr.length > 0 ){
+            img_id = imgsIds.imgsArr[getRandomic(imgsIds.imgsArr.length - 1)];
+        }
+        else {
+            logErr(`imgsIds is empty.`);
+            replyError(msg);
+            return;
+        }
+    }
+    else {
+        logErr(`imgs is empty.`);
+        replyError(msg);
+        return;
+    }
+    
 
     rpOpt = {
         uri: flickrObj.ENDPOINT,
@@ -218,12 +240,12 @@ var getPhotoV2 = function(msg){
             && response.photo.urls.url[0]._content) {
                 msg.reply.text(response.photo.urls.url[0]._content);
             } else {
-                msg.reply.text(`Something goes wrong.`);
+                replyError(msg);
                 logErr(console.log(response));
             }
     }).catch(err => {
-        console.log(err);
-        msg.reply.text(`Something goes wrong.`);
+        logErr(err.message);
+        replyError(msg);
     });
 };
 
