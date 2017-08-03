@@ -90,7 +90,7 @@ var scrapeEngine = function(name, attribs, imgsArr){
                 {
                     let img = img_url.split('/');
                     if(img.length == 0) {
-                        logErrS('img has no length.');
+                        logErr('img has no length.');
                         return;
                     }
                     img = img[img.length-1];
@@ -215,11 +215,15 @@ var getPhotoV2 = function(msg){
             && response.photo.urls
             && response.photo.urls.url 
             && response.photo.urls.url[0]
-            && response.photo.urls.url[0]._content)
-            msg.reply.text(response.photo.urls.url[0]._content);
+            && response.photo.urls.url[0]._content) {
+                msg.reply.text(response.photo.urls.url[0]._content);
+            } else {
+                msg.reply.text(`Something goes wrong.`);
+                logErr(console.log(response));
+            }
     }).catch(err => {
         console.log(err);
-        logErr(`Something goes wrong.`);
+        msg.reply.text(`Something goes wrong.`);
     });
 };
 
