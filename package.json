@@ -2,7 +2,7 @@
   "name": "flickrexplored_bot",
   "version": "0.0.1",
   "description": "FlickrExplored Bot shows random Flickr's explored images.",
-  "main": "app.js",
+  "main": "flickrexplored.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -24,6 +24,7 @@
   "dependencies": {
     "async": "^2.5.0",
     "htmlparser2": "^3.9.2",
+    "moment": "^2.18.1",
     "request": "^2.81.0",
     "request-promise": "^4.2.1",
     "telebot": "^1.2.2"
