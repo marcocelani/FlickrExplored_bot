@@ -239,6 +239,12 @@ var removeFirstItem = function() {
     }
 };
 
+var getStats = function(){
+    return JSON.stringify({ lastUpdate: imgsObj.lastUpdate, 
+                            imgsLength: imgsObj.imgs.length,
+                            scrapeInProgress : imgsObj.scrapeInProgress}, null, 4);
+};
+
 var init = function(){
     scrapeImg();
 
@@ -255,6 +261,7 @@ var init = function(){
     bot.on(['/photo'], (msg) => getPhotoV2(msg) );
     bot.on('/help', (msg) => msg.reply.text(usage()));
     bot.on('/about', (msg) => msg.reply.text(about()));
+    bot.on('/stats', (msg) => msg.reply.text(getStats()));
     bot.start();
 };
 
