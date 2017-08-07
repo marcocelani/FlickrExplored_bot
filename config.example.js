@@ -6,6 +6,17 @@ var config = {
     IMGS_REFRESH_TIME   : (1000 * 60 * 60 * 24), /* 24h */
     IMGS_ARR_REFRESH    : (1000 * 60 * 60 * 23), /* 23h */
     DAY_BEFORE          : 28, /* FULL MOON =) */
+    ENABLE_WEBHOOK      : true,
+    POLLING             : {
+        interval    : 5000
+    },
+    WEBHOOK             : {
+        url : 'URL',
+        key : 'file.key',
+        cert: 'file.cert',
+        port: 'PORT_NUMBER',
+        host: '0.0.0.0'
+    }
 }
 
 exports.config = config;

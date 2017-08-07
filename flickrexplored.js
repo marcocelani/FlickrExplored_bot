@@ -5,10 +5,6 @@ const async = require('async');
 const htmlparser = require('htmlparser2');
 const moment = require('moment');
 
-const bot = new TeleBot({
-    token: config.BOT_TOKEN
-});
-
 const flickrObj = {
     ENDPOINT    : 'https://api.flickr.com/services/rest/',
     METHODS     : ['flickr.interestingness.getList', 'flickr.people.getInfo', 'flickr.photos.getInfo'],
@@ -272,7 +268,43 @@ var getStats = function(){
                             scrapeInProgress : imgsObj.scrapeInProgress}, null, 4);
 };
 
+var getBot = function(){
+    let botOpt = {
+        token: config.BOT_TOKEN,
+    };
+    if(config.ENABLE_WEBHOOK
+        && config.ENABLE_WEBHOOK === true)
+    {
+        botOpt.webhook = {};
+        botOpt.webhook.key = config.WEBHOOK.key;
+        botOpt.webhook.cert = config.WEBHOOK.cert;
+        botOpt.webhook.url = config.WEBHOOK.url;
+        botOpt.webhook.host = config.WEBHOOK.host;
+        botOpt.webhook.port = config.WEBHOOK.port;
+
+    } else {
+        botOpt.polling = {
+            interval : config.POLLING.interval
+        };
+    }
+    return new TeleBot(botOpt);
+};
+
+var setBotCommand = function(){
+    bot.on(['/start'], (msg) =>  msg.reply.text(getWelcome(msg.from.first_name)));
+    bot.on(['/photo'], (msg) => getPhotoV2(msg) );
+    bot.on('/help', (msg) => msg.reply.text(usage()));
+    bot.on('/about', (msg) => msg.reply.text(about()));
+    bot.on('/stats', (msg) => msg.reply.text(getStats()));
+};
+
+const bot = getBot();
+
 var init = function(){
+    
+    setBotCommand();
+    bot.start();
+
     scrapeImg();
 
     setInterval(() => {
@@ -283,13 +315,6 @@ var init = function(){
     setInterval(() => {
         scrapeImg()
     },config.IMGS_REFRESH_TIME)
-
-    bot.on(['/start'], (msg) =>  msg.reply.text(getWelcome(msg.from.first_name)));
-    bot.on(['/photo'], (msg) => getPhotoV2(msg) );
-    bot.on('/help', (msg) => msg.reply.text(usage()));
-    bot.on('/about', (msg) => msg.reply.text(about()));
-    bot.on('/stats', (msg) => msg.reply.text(getStats()));
-    bot.start();
 };
 
 init();

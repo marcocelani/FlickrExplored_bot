@@ -25,6 +25,7 @@
     "async": "^2.5.0",
     "htmlparser2": "^3.9.2",
     "moment": "^2.18.1",
+    "mongodb": "^2.2.30",
     "request": "^2.81.0",
     "request-promise": "^4.2.1",
     "telebot": "^1.2.2"
