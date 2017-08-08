@@ -4,6 +4,7 @@ const rp = require('request-promise');
 const async = require('async');
 const htmlparser = require('htmlparser2');
 const moment = require('moment');
+const MongoClient = require('mongodb').MongoClient;
 
 const flickrObj = {
     ENDPOINT    : 'https://api.flickr.com/services/rest/',
@@ -34,10 +35,79 @@ Type /help for show help.
 Type /about for show info.`; 
 };
 
-var getWelcome = function(firstName) {
-   return `Welcome ${(firstName) ? firstName : ''}!
+var insertNewDoc = function(db, coll, msg, updateGetCount) {
+    let toBeInsertedObj = msg.from;
+    toBeInsertedObj.getCount = (updateGetCount) ? 1 : 0;
+    toBeInsertedObj.commands = [];
+    toBeInsertedObj.commands.push({ cmd : '/start', date : moment() });
+    coll.insertOne(toBeInsertedObj, (err, r) => {
+        if(err){
+            logErr(err.message);
+            db.close();
+            return;
+        }
+        if(r.insertedCount === 1){
+            logInfo(`New user @${toBeInsertedObj.username} added.`);
+            db.close();
+        } else {
+            logErr(`No record inserted.`);
+            db.close();
+        }
+    });
+};
+
+var updateUserStatus = function(db, coll, doc){
+    coll.updateOne(
+        {_id: doc._id},
+        { $push: { commands: { cmd: '/start', date: moment() }}},
+        (err, result) => {
+            if(err){
+                logErr(err.message);
+            } else {
+                logInfo(`User @${doc.username}: /start command updated.`);
+            }
+            db.close();
+        }
+    );
+};
+
+var updateGetCount = function(db, coll, doc){
+    coll.updateOne(
+        {_id: doc._id},
+        {$inc : { getCount: 1 }},
+        (err, result) => {
+            if(err){
+                logErr(`Error in updateGetCount:${err.message}`);
+            } else {
+                logInfo(`User @${doc.username}: getCount field updated`);
+            }
+            db.close();
+        }
+    );
+};
+
+var getWelcome = function(msg) {
+    async.waterfall(
+        [
+            getDB(),
+            getCollection(),
+            findOne(msg),
+            (db, coll, doc, cb) => {
+                if(!doc){
+                    insertNewDoc(db, coll, msg);
+                    cb(null, null);
+                } else {
+                    updateUserStatus(db, coll, doc);
+                    cb(null, null);
+                }
+            }
+        ],
+        function(err, result){
+            msg.reply.text(`Welcome ${(msg.from.first_name) ? msg.from.first_name : ''}!
 My mission is to show you Flickr's Explored photos in a randomic way.
-${usage()}`;
+${usage()}`);
+        }
+    );
 };
 
 /* get randomic number between 0 and max. */
@@ -140,7 +210,7 @@ var scrapeImg = function() {
         logInfo(`Another scrape is in progress.`);
         return;
     }
-    let mDate = moment(new Date());
+    let mDate = moment(new Date()).subtract(1, 'days');
 
     if(imgsObj.lastUpdate){
         if(mDate.format('YYYY/DD/MM') === imgsObj.lastUpdate.format('YYYY/DD/MM')) {
@@ -161,10 +231,11 @@ var scrapeImg = function() {
     if(dayBefore != 0){
         logInfo(`imgs needs update. dayBefore:${dayBefore}`)
         let tasksArr = [];
+        let mDateStr = mDate.format('YYYY/MM/DD');
         for(let i=0; i<dayBefore; ++i) {
-            mDateStr = mDate.subtract(1, 'days').format('YYYY/MM/DD');
             tasksArr.push(getPhotoIdsEngine({ uri : flickrObj.FLICKR_EXPLORE_URL + 
                                                     mDateStr }, mDateStr, i));
+            mDateStr = mDate.subtract(1, 'days').format('YYYY/MM/DD');
         }
         logInfo('starting parallel tasks...');
         async.parallelLimit(tasksArr, 2,
@@ -178,7 +249,7 @@ var scrapeImg = function() {
                 for(let i=result.length-1; i>=0; --i){
                     imgsObj.imgs.push(result[i]);
                 }
-                imgsObj.lastUpdate = moment();
+                imgsObj.lastUpdate = moment().subtract(1, 'days');
                 imgsObj.scrapeInProgress = false;
             }
         );
@@ -186,63 +257,81 @@ var scrapeImg = function() {
 };
 
 var getPhotoV2 = function(msg){
-    if(imgsObj.imgs.length == 0){
-        logErr(`imgs is empty`);
-        return;
-    }
-
-    let imgsIds;
-    let img_id;
-    if(imgsObj.imgs.length > 0){
-        imgsIds = imgsObj.imgs[getRandomic(imgsObj.imgs.length - 1)];
-        if(imgsIds.imgsArr.length > 0 ){
-            img_id = imgsIds.imgsArr[getRandomic(imgsIds.imgsArr.length - 1)];
-        }
-        else {
-            logErr(`imgsIds is empty.`);
-            replyError(msg);
-            return;
-        }
-    }
-    else {
-        logErr(`imgs is empty.`);
-        replyError(msg);
-        return;
-    }
-    
-
-    rpOpt = {
-        uri: flickrObj.ENDPOINT,
-        qs: {
-                method: flickrObj.METHODS[2],
-                api_key: flickrObj.API_KEY,
-                photo_id: img_id,
-                format: flickrObj.FORMAT,
-                nojsoncallback: flickrObj.NOJSONCB,
-        },
-        json: true
-    };
-    
-    rp(rpOpt)
-    .then( response => {
-        if(response.stat === 'fail'){
-            msg.reply.text(getMsgError(response));
-            return;
-        }
-        if(response.photo
-            && response.photo.urls
-            && response.photo.urls.url 
-            && response.photo.urls.url[0]
-            && response.photo.urls.url[0]._content) {
-                msg.reply.text(response.photo.urls.url[0]._content);
-            } else {
-                replyError(msg);
-                logErr(console.log(response));
+    async.waterfall(
+        [
+            getDB(),
+            getCollection(),
+            findOne(msg),
+            (db, coll, doc, cb) => {
+                if(!doc){
+                    insertNewDoc(db, coll, msg, true);
+                    cb(null, null);
+                } else {
+                    updateGetCount(db, coll, doc);
+                    cb(null, null);
+                }
             }
-    }).catch(err => {
-        logErr(err.message);
-        replyError(msg);
-    });
+        ],
+        function(err, result){
+            if(imgsObj.imgs.length == 0){
+                logErr(`imgs is empty`);
+                return;
+            }
+
+            let imgsIds;
+            let img_id;
+            if(imgsObj.imgs.length > 0){
+                imgsIds = imgsObj.imgs[getRandomic(imgsObj.imgs.length - 1)];
+                if(imgsIds.imgsArr.length > 0 ){
+                    img_id = imgsIds.imgsArr[getRandomic(imgsIds.imgsArr.length - 1)];
+                }
+                else {
+                    logErr(`imgsIds is empty.`);
+                    replyError(msg);
+                    return;
+                }
+            }
+            else {
+                logErr(`imgs is empty.`);
+                replyError(msg);
+                return;
+            }
+    
+            rpOpt = {
+                uri: flickrObj.ENDPOINT,
+                qs: {
+                    method: flickrObj.METHODS[2],
+                    api_key: flickrObj.API_KEY,
+                    photo_id: img_id,
+                    format: flickrObj.FORMAT,
+                    nojsoncallback: flickrObj.NOJSONCB,
+                },
+                json: true
+            };
+    
+            rp(rpOpt)
+            .then( response => {
+                if(response.stat === 'fail'){
+                    msg.reply.text(getMsgError(response));
+                    return;
+                }
+                if(response.photo
+                    && response.photo.urls
+                    && response.photo.urls.url 
+                    && response.photo.urls.url[0]
+                    && response.photo.urls.url[0]._content) 
+                {
+                        msg.reply.text(response.photo.urls.url[0]._content);
+                } else {
+                    replyError(msg);
+                    logErr(console.log(response));
+                }
+            }).catch(err => {
+                logErr(err.message);
+                replyError(msg);
+            });
+        }
+    );
 };
 
 var removeFirstItem = function() {
@@ -291,17 +380,67 @@ var getBot = function(){
 };
 
 var setBotCommand = function(){
-    bot.on(['/start'], (msg) =>  msg.reply.text(getWelcome(msg.from.first_name)));
+    bot.on(['/start'], (msg) =>  getWelcome(msg));
     bot.on(['/photo'], (msg) => getPhotoV2(msg) );
     bot.on('/help', (msg) => msg.reply.text(usage()));
     bot.on('/about', (msg) => msg.reply.text(about()));
     bot.on('/stats', (msg) => msg.reply.text(getStats()));
 };
 
+var getDB = function() {
+    return function(cb){
+        MongoClient.connect(config.MONGODB.connectionStr, (err, db) => {
+            if(err) {
+                logErr(err.message);
+                cb(err);
+                return;
+            } else {
+                cb(null, db);
+            }
+        });
+    }
+};
+
+var getCollection = function() {
+    return function(db, cb){
+        db.collection(config.MONGODB.usersCollection, (err, coll) => {
+            if(err){
+                logErr(`getCollection error:${err.message}`);
+                db.close();
+                return;
+            }
+            cb(null, db, coll);
+        })
+    }
+};
+
+var findOne = function(msg){
+    return function(db, coll, cb) {
+        coll.findOne({ id : msg.from.id }, (err, doc) => {
+            if(err){
+                logErr(`Error in findOne:${err.message}`);
+                db.close();
+                return;
+            }
+            cb(null, db, coll, doc);
+        });
+    }
+};
+
+var getDoc = function(db, coll, msg, cb){
+    if(!db && !coll){
+        let errStr = `Wrong db or coll`;
+        logErr(errStr);
+        db.close();
+        cb(new Error(errStr));
+        return;
+    }
+    
+};
+
 const bot = getBot();
 
 var init = function(){
-    
     setBotCommand();
     bot.start();
 

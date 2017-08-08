@@ -16,6 +16,11 @@ var config = {
         cert: 'file.cert',
         port: 'PORT_NUMBER',
         host: '0.0.0.0'
+    },
+    ENABLE_MONGODB      : false,
+    MONGODB             : {
+        connectionStr : 'mongodb://localhost:27017/yourproject',
+        usersCollection : 'your_collection'
     }
 }
 
