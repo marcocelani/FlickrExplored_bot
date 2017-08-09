@@ -110,6 +110,47 @@ ${usage()}`);
     );
 };
 
+var stopBot = function(db, coll, doc){
+    coll.updateOne(
+        {_id: doc._id},
+        { $push: { commands: { cmd: '/stop', date: moment() }}},
+        (err, result) => {
+            if(err){
+                logErr(`Error in stopBot:${err.message}`);
+            } else {
+                logInfo(`User @${doc.username}: /stop command updated`);
+            }
+            db.close();
+        }
+    );
+};
+
+var getStop = function(msg){
+    async.waterfall(
+        [
+            getDB(),
+            getCollection(),
+            findOne(msg),
+            (db, coll, doc, cb) => {
+                if(doc){
+                    stopBot(db, coll, doc);
+                    cb(null, true);
+                    return;
+                }
+                cb(null, false);
+            }
+        ],
+        (err, result) => {
+            if(result === true){
+                msg.reply.text(`Bye bye ${msg.from.username}`);
+            }
+            else {
+                msg.reply.text(`You never starts bot.`);
+            }
+        }
+    );
+};
+
 /* get randomic number between 0 and max. */
 var getRandomic = function(upperBound){
     if(upperBound && typeof(upperBound) !== 'number')
@@ -380,11 +421,12 @@ var getBot = function(){
 };
 
 var setBotCommand = function(){
-    bot.on(['/start'], (msg) =>  getWelcome(msg));
-    bot.on(['/photo'], (msg) => getPhotoV2(msg) );
+    bot.on('/start', (msg) =>  getWelcome(msg));
+    bot.on('/photo', (msg) => getPhotoV2(msg) );
     bot.on('/help', (msg) => msg.reply.text(usage()));
     bot.on('/about', (msg) => msg.reply.text(about()));
     bot.on('/stats', (msg) => msg.reply.text(getStats()));
+    bot.on('/stop', (msg) => getStop(msg));
 };
 
 var getDB = function() {
