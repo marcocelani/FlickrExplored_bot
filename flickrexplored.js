@@ -199,7 +199,7 @@ var getPhotoIdsEngine = function(rpObj, dateStr, task_id){
             cb(null, { date: dateStr, imgsArr: imgsArr });
         })
         .catch( err => {
-            console.log(err);
+            logErr(`Error in getPhotoIdsEngine:${err.message} -> ${err.StatusCodeError}`);
             cb(err);
         });
     };
@@ -389,6 +389,12 @@ var setBotCommand = function(){
 
 var getDB = function() {
     return function(cb){
+        if(!config.ENABLE_MONGODB 
+            || config.ENABLE_MONGODB === false)
+        {
+            cb(new Error(`MongoDB is disabled.`));
+            return;
+        }
         MongoClient.connect(config.MONGODB.connectionStr, (err, db) => {
             if(err) {
                 logErr(err.message);
@@ -427,23 +433,10 @@ var findOne = function(msg){
     }
 };
 
-var getDoc = function(db, coll, msg, cb){
-    if(!db && !coll){
-        let errStr = `Wrong db or coll`;
-        logErr(errStr);
-        db.close();
-        cb(new Error(errStr));
-        return;
-    }
-    
-};
-
 const bot = getBot();
 
 var init = function(){
     setBotCommand();
-    bot.start();
-
     scrapeImg();
 
     setInterval(() => {
@@ -453,7 +446,9 @@ var init = function(){
     );
     setInterval(() => {
         scrapeImg()
-    },config.IMGS_REFRESH_TIME)
+    },config.IMGS_REFRESH_TIME);
+
+    bot.start();
 };
 
 init();
