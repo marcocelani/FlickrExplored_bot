@@ -6,6 +6,7 @@ var config = {
     IMGS_REFRESH_TIME   : (1000 * 60 * 60 * 24), /* 24h */
     IMGS_ARR_REFRESH    : (1000 * 60 * 60 * 23), /* 23h */
     DAY_BEFORE          : 28, /* FULL MOON =) */
+    TASK_DELAY          : 60, /* minutes */
     ENABLE_WEBHOOK      : true,
     POLLING             : {
         interval    : 5000

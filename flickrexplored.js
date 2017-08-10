@@ -217,32 +217,40 @@ var scrapeEngine = function(name, attribs, imgsArr){
     }
 }
 
+var getRandomSecond = function(){
+    return getRandomic( ((config.TASK_DELAY || config.TASK_DELAY > 0) ? config.TASK_DELAY : 60) * 1000);
+};
+
 var getPhotoIdsEngine = function(rpObj, dateStr, task_id){
     if(!rpObj){
         return function(cb){
             cb(new Error(`Wrong rpObj.`));
         };
     }
+
     return function(cb) {
-        logInfo(`task ${task_id} started.`)
-        let imgsArr = [];
-        let parser = new htmlparser.Parser(
-        {
-           onopentag: function(name, attribs){
-               scrapeEngine(name, attribs, imgsArr);
-           }
-        });
-        rp(rpObj)
-        .then( response => {
-            parser.write(response);
-            parser.end();
-            logInfo(`task ${task_id} ended.`);
-            cb(null, { date: dateStr, imgsArr: imgsArr });
-        })
-        .catch( err => {
-            logErr(`Error in getPhotoIdsEngine:${err.message} -> ${err.StatusCodeError}`);
-            cb(err);
-        });
+        setTimeout(function(){ /* DOS avoiding... */
+            logInfo(`task ${task_id} started.`)
+            let imgsArr = [];
+            let parser = new htmlparser.Parser(
+            {
+                onopentag: function(name, attribs){
+                    scrapeEngine(name, attribs, imgsArr);
+                }
+            });
+            
+            rp(rpObj)
+            .then( response => {
+                parser.write(response);
+                parser.end();
+                logInfo(`task ${task_id} ended.`);
+                cb(null, { date: dateStr, imgsArr: imgsArr });
+            })
+            .catch( err => {
+                logErr(`Error in getPhotoIdsEngine:${err.message} -> ${err.StatusCodeError}`);
+                cb(err);
+            });
+        }, getRandomSecond());
     };
 };
 
@@ -279,7 +287,7 @@ var scrapeImg = function() {
             mDateStr = mDate.subtract(1, 'days').format('YYYY/MM/DD');
         }
         logInfo('starting parallel tasks...');
-        async.parallelLimit(tasksArr, 2,
+        async.parallel(tasksArr,
             function(err, result){  
                 if(err){
                     logErr(`Something goes wrong:${err.message}.`);
