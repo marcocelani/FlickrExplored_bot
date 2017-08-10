@@ -31,8 +31,9 @@ var about = function(){
 
 var usage = function() {
     return `Type /photo for pick a photo.
-Type /help for show help.
-Type /about for show info.`; 
+Type /help for showing help.
+Type /about for showing info.
+Type /stop for stopping.`; 
 };
 
 var insertNewDoc = function(db, coll, msg, updateGetCount) {
