@@ -174,7 +174,7 @@ var getMsgError = function(response){
 var log = function(type, msg){
     if(!type)
         type = 'INFO';
-    console.log(`[${type}][${moment().format('DD/MM/YYYY hh:mm:ss')}] ${msg}`);
+    console.log(`[${type}][${moment().format('DD/MM/YYYY hh:mm:ss a')}] ${msg}`);
 };
 
 var logInfo = function(msg){
