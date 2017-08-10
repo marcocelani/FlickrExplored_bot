@@ -104,7 +104,7 @@ var getWelcome = function(msg) {
             }
         ],
         function(err, result){
-            msg.reply.text(`Welcome ${(msg.from.first_name) ? msg.from.first_name : ''}!
+            msg.reply.text(`Welcome ${(msg.from.username) ? msg.from.username : ''}!
 My mission is to show you Flickr's Explored photos in a randomic way.
 ${usage()}`);
         }
