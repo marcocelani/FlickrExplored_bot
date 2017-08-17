@@ -24,6 +24,16 @@ var imgsObj = {
     scrapeInProgress: false
 };
 /*************************/
+/* Users settings DS     */
+/*************************/
+var usersSettings = {};
+/*************************/
+var CB_CHOICE = [ 
+                  { type:'sameHour', text:'Every Day [same hour]'}, /* NOT USED */
+                  { type: 'randomHour', text: 'Every Day' },
+                  { type: 'deleteSetup', text: 'Remove setting.'}
+                ];
+/**************************/
 
 var about = function(){
     return `${config.APP_NAME} made by @${config.TELEGRAM_USERNAME}.`;
@@ -31,6 +41,7 @@ var about = function(){
 
 var usage = function() {
     return `Type /photo for pick a photo.
+Type /setup for setting some options.
 Type /help for showing help.
 Type /about for showing info.
 Type /stop for stopping.`; 
@@ -162,7 +173,7 @@ var getRandomic = function(upperBound){
 };
 
 var replyError = function(msg){
-    msg.reply.text(`Something goes wrong.`);
+    bot.sendMessage(msg.from.id, `Something goes wrong.`);
 };
 
 var getMsgError = function(response){
@@ -371,7 +382,7 @@ var getPhotoV2 = function(msg){
                     && response.photo.urls.url[0]
                     && response.photo.urls.url[0]._content) 
                 {
-                        msg.reply.text(response.photo.urls.url[0]._content);
+                        bot.sendMessage(msg.from.id, response.photo.urls.url[0]._content);
                 } else {
                     replyError(msg);
                     logErr(console.log(response));
@@ -382,6 +393,79 @@ var getPhotoV2 = function(msg){
             });
         }
     );
+};
+
+var setupText = function() {
+return `You can setup this bot for getting photo automatically.  
+You don't have any setting yet. Please make a choice.`
+};
+
+var getNoDataInlineKeyBoard = function() {
+    return bot.inlineKeyboard(
+        [
+            // [
+            //     bot.inlineButton(CB_CHOICE[0].text, { callback: CB_CHOICE[0].type }),
+            // ],
+            [
+                bot.inlineButton(CB_CHOICE[1].text, { callback: CB_CHOICE[1].type })
+            ],
+            /* TODO */
+            /*[
+                bot.inlineButton('Every Day [custom hour]', {callback: 'TODO'})
+            ]*/
+        ]
+    );
+};
+
+/* NOT USED */
+var getSameHourInlineKeyBoard = function(){
+    return bot.inlineKeyboard(
+        [
+            [
+                bot.inlineButton(CB_CHOICE[1].text, { callback: CB_CHOICE[1].type } )
+            ],
+            [
+                bot.inlineButton(CB_CHOICE[2].text, { callback: CB_CHOICE[2].type })
+            ]
+        ]
+    );
+};
+
+var getRandomHourInlineKeyBoard = function() {
+    return bot.inlineKeyboard(
+        [
+            // [
+            //     bot.inlineButton(CB_CHOICE[0].text, { callback: CB_CHOICE[0].type } )
+            // ],
+            [
+                bot.inlineButton(CB_CHOICE[2].text, { callback: CB_CHOICE[2].type } )
+            ]
+        ]
+    );
+};
+
+/* NOT USED */
+var setupSameHourText = function() {
+    return `You have... same hour...`;
+};
+
+var setupRandomHourText = function(msg) {
+    return `Next photo on:${usersSettings[msg.from.id].nextPhotoTime.format('DD/MM/YYYY hh:mm a')}`;
+};
+
+var setup = function(msg) {
+    if(!usersSettings[msg.from.id]){
+        let replyMarkup = getNoDataInlineKeyBoard();
+        bot.sendMessage(msg.from.id, setupText(),  { replyMarkup } );
+    }
+    // else if(usersSettings[msg.from.id].type === CB_CHOICE[0].type){ /* same hour */
+    //     let replyMarkup = getSameHourInlineKeyBoard();
+    //     bot.sendMessage(msg.from.id, setupSameHourText(), { replyMarkup } );
+    // }
+    else if(usersSettings[msg.from.id].type === CB_CHOICE[1].type){ /* random hour */
+        let replyMarkup = getRandomHourInlineKeyBoard();
+        bot.sendMessage(msg.from.id, setupRandomHourText(msg), { replyMarkup } );
+    }
 };
 
 var removeFirstItem = function() {
@@ -429,6 +513,190 @@ var getBot = function(){
     return new TeleBot(botOpt);
 };
 
+var findOneAndUpdateUserSetting = function(msg, userObj){
+    return function(db, coll, cb){
+        coll.findOneAndUpdate(
+            { id: msg.from.id },
+            { $set: { userSetup : (userObj) ? { nextPhotoTime: userObj.nextPhotoTime, type: userObj.type } : null } },
+            function(err, obj){
+                if(err){
+                    cb(err);
+                } else {
+                    cb(null);
+                }
+                db.close();
+            }
+        );
+    }
+};
+
+var updateUserDBSetting = function(msg, userObj) {
+    async.waterfall(
+        [
+            getDB(),
+            getCollection(),
+            findOneAndUpdateUserSetting(msg, userObj)
+        ],
+        function(err, result){
+            if(err){
+                logErr(err.message);
+                console.log(err);
+            }
+        }
+    );
+};
+
+var removeUserDBSetting = function(msg){
+    async.waterfall(
+        [
+            getDB(),
+            getCollection(),
+            findOneAndUpdateUserSetting(msg, null)
+        ],
+        function(err, result){
+            if(err){
+                console.log(err);
+            }
+        }
+    );
+};
+
+var getUserObj = function(type) {
+    return {
+        nextPhotoTime: moment().local().add(1, 'minutes'),
+        type: type
+    };
+};
+
+var getTotMillis = function(userObj){
+    let totMillis = userObj.nextPhotoTime.valueOf() - moment().add(2, 'hours').valueOf();
+    if(totMillis < 0 || isNaN(totMillis) || !isFinite(totMillis))
+        totMillis = 60 * 1000 * 24;
+    return totMillis;
+};
+
+var settingInterval = function(msg, totMillis, userObj){
+    if(userObj.type === CB_CHOICE[1].type){
+        userObj.nextPhotoTime = moment().local().add(1, 'day').add(getRandomic(24 - moment().local().hours()) + 1, 'hours');
+        totMillis = getTotMillis(userObj);
+    }
+    return setInterval(function(){
+        if(userObj.scheduledTimer && userObj.type === CB_CHOICE[1].type){
+            clearInterval(userObj.scheduledTimer);   
+        }
+        getPhotoV2(msg);
+        if(usersSettings[msg.from.id]){
+            usersSettings[msg.from.id].nextPhoto = moment(usersSettings[msg.from.id].nextPhoto).add(2, 'minutes');
+            updateUserDBSetting(msg, userObj);
+        }
+    }, totMillis , msg);
+};
+
+var resetTime = function(msg){
+    if(usersSettings[msg.from.id] && usersSettings[msg.from.id].scheduledTimer){
+        clearInterval(usersSettings[msg.from.id].scheduledTimer);
+    }
+};
+
+var setRandomHourSetting = function(msg, hideMessage, restoring, nextPhotoTime){
+    resetTime(msg);
+    let userObj = getUserObj(CB_CHOICE[1].type);
+    
+    if(!restoring)
+        userObj.nextPhotoTime = moment().local().add(1, 'day').add(getRandomic(24 - moment().local().hours()) + 1, 'hours');
+    else {
+        userObj.nextPhotoTime = moment(nextPhotoTime).local();
+    }
+
+    let totMillis = getTotMillis(userObj);
+  
+    userObj.scheduledTimer = settingInterval(msg, totMillis, userObj);
+    usersSettings[msg.from.id] = userObj;
+    
+    if(!nextPhotoTime)
+        updateUserDBSetting(msg, userObj);
+    
+    if(!hideMessage)
+        bot.sendMessage(msg.from.id, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY hh:mm a')}`);    
+};
+
+/* NOT USED */
+var setSameHourSetting = function(msg) {
+    resetTime(msg);
+    let userObj = getUserObj();
+    let totMillis = getTotMillis(userObj);
+
+    userObj.scheduledTimer = settingInterval(msg, totMillis, userObj);
+
+    usersSettings[msg.from.id] = userObj;
+    updateUserDBSetting(msg, userObj);
+
+    bot.sendMessage(msg.from.id, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY hh:mm a')}`);
+};
+
+var resetSettting = function(msg, userObj){
+    resetTime(msg);
+    removeUserDBSetting(msg);
+    usersSettings[msg.from.id] = null;
+    bot.sendMessage(msg.from.id, `Setting removed.`);
+};
+
+var restoreUsersSetting = function() {
+    async.waterfall(
+        [
+            getDB(),
+            getCollection(),
+            (db, coll, cb) => {
+                coll.find({ userSetup : { $ne: null } })
+                    .toArray(function(err, docs){
+                        if(err){
+                            logErr(`Error in restoreUsersSeting:${err.message}`);
+                            cb(err);
+                        } else {
+                            cb(null, docs);
+                        }
+                        db.close();
+                    });
+            },
+        ],
+        (err, result) => {
+            if(err){
+                console.log(err);
+                return;
+            }
+            for(let i=0; i<result.length; ++i){
+                if(moment.isMoment(result[i].userSetup.nextPhotoTime)
+                    && moment(result[i].userSetup.nextPhotoTime).isAfter(moment().local())) {
+                    logInfo(`restoring user:${result[i].id}`);
+                    setRandomHourSetting({ from: { id : result[i].id } }, true, true, result[i].userSetup.nextPhotoTime );
+                    logInfo(`restored user:${result[i].id}`);
+                } else {
+                    logInfo(`restoring user:${result[i].id}`);
+                    setTimeout(function(){
+                        getPhotoV2({ from: { id : result[i].id } });                        
+                        setRandomHourSetting({ from: { id : result[i].id } }, true);
+                        logInfo(`restored user:${result[i].id}`);
+                    }, 1000*60);
+                }
+            }
+        }
+    );
+};
+
+var setBotListeners = function() {
+    bot.on('callbackQuery', msg => {
+        if(msg.data === CB_CHOICE[0].type){ /* same hour */
+            //setSameHourSetting(msg); /* not used */
+        } else if(msg.data === CB_CHOICE[1].type){ /* random hour */
+            setRandomHourSetting(msg);
+        } else if(msg.data === CB_CHOICE[2].type){ /* reset */
+            resetSettting(msg);
+        } else {
+            bot.sendMessage(msg.from.id, `Wrong choice: ${ msg.data }`);
+        }
+    });
+};
+
 var setBotCommand = function(){
     bot.on('/start', (msg) =>  getWelcome(msg));
     bot.on('/photo', (msg) => getPhotoV2(msg) );
@@ -436,6 +704,7 @@ var setBotCommand = function(){
     bot.on('/about', (msg) => msg.reply.text(about()));
     bot.on('/stats', (msg) => msg.reply.text(getStats()));
     bot.on('/stop', (msg) => getStop(msg));
+    bot.on('/setup', (msg) => setup(msg));
 };
 
 var getDB = function() {
@@ -463,6 +732,7 @@ var getCollection = function() {
         db.collection(config.MONGODB.usersCollection, (err, coll) => {
             if(err){
                 logErr(`getCollection error:${err.message}`);
+                console.log(err);
                 db.close();
                 return;
             }
@@ -488,7 +758,11 @@ const bot = getBot();
 
 var init = function(){
     setBotCommand();
+    setBotListeners();
+
     scrapeImg();
+
+    restoreUsersSetting();
 
     setInterval(() => {
         removeFirstItem()
