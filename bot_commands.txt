@@ -1,0 +1,2 @@
+photo - Get random photo from Flickr's Explore.
+setup - Setup photo schedulation.
