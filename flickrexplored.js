@@ -459,6 +459,13 @@ var setupRandomHourText = function(msg) {
 };
 
 var setup = function(msg) {
+    if(msg.chat.type === 'group' 
+        || msg.chat.type === 'supergroup'
+        || msg.chat.type === 'channel')
+    {
+        bot.sendMessage(msg.chat.id, `Setup command not allowed in groups.`); /* TODO? I don't know. */
+        return;
+    }
     async.waterfall(
         [
             getDB(),
@@ -510,7 +517,13 @@ var removeFirstItem = function() {
     }
 };
 
-var getStats = function(){
+var getStats = function(msg){
+    bot.getChat(msg.chat.id).then(
+        (result) => {
+            console.log('msg', msg);
+            console.log('result:', result);
+        }
+    );
     return JSON.stringify({ lastUpdate: imgsObj.lastUpdate, 
                             imgsLength: imgsObj.imgs.length,
                             scrapeInProgress : imgsObj.scrapeInProgress}, null, 4);
@@ -734,7 +747,7 @@ var setBotCommand = function(){
     bot.on('/photo', (msg) => getPhotoV2(msg) );
     bot.on('/help', (msg) => msg.reply.text(usage()));
     bot.on('/about', (msg) => msg.reply.text(about()));
-    bot.on('/stats', (msg) => msg.reply.text(getStats()));
+    bot.on('/stats', (msg) => msg.reply.text(getStats(msg)));
     bot.on('/stop', (msg) => getStop(msg));
     bot.on('/setup', (msg) => setup(msg));
 };
