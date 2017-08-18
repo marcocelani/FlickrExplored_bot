@@ -519,6 +519,13 @@ var getStats = function(){
 var getBot = function(){
     let botOpt = {
         token: config.BOT_TOKEN,
+        usePlugins: ['floodProtection'],
+        pluginConfig: {
+            floodProtection: {
+                interval: 2,
+                message: 'Too many messages, relax!'
+            }
+        }
     };
     if(config.ENABLE_WEBHOOK
         && config.ENABLE_WEBHOOK === true)
