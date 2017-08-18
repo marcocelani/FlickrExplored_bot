@@ -35,8 +35,15 @@ var CB_CHOICE = [
                 ];
 /**************************/
 
-var about = function(){
-    return `${config.APP_NAME} made by @${config.TELEGRAM_USERNAME}.`;
+var about = function(msg){
+    let replyMarkup = bot.inlineKeyboard(
+        [
+            [
+                bot.inlineButton(`GitHub repository`, { url: 'https://github.com/marcocelani/FlickrExplored_bot'})
+            ]
+        ]
+    );
+    return bot.sendMessage(msg.from.id, `${config.APP_NAME} made by @${config.TELEGRAM_USERNAME}.`, { replyMarkup }); 
 };
 
 var usage = function() {
@@ -518,12 +525,6 @@ var removeFirstItem = function() {
 };
 
 var getStats = function(msg){
-    bot.getChat(msg.chat.id).then(
-        (result) => {
-            console.log('msg', msg);
-            console.log('result:', result);
-        }
-    );
     return JSON.stringify({ lastUpdate: imgsObj.lastUpdate, 
                             imgsLength: imgsObj.imgs.length,
                             scrapeInProgress : imgsObj.scrapeInProgress}, null, 4);
@@ -746,7 +747,7 @@ var setBotCommand = function(){
     bot.on('/start', (msg) =>  getWelcome(msg));
     bot.on('/photo', (msg) => getPhotoV2(msg) );
     bot.on('/help', (msg) => msg.reply.text(usage()));
-    bot.on('/about', (msg) => msg.reply.text(about()));
+    bot.on('/about', (msg) => about(msg));
     bot.on('/stats', (msg) => msg.reply.text(getStats(msg)));
     bot.on('/stop', (msg) => getStop(msg));
     bot.on('/setup', (msg) => setup(msg));
