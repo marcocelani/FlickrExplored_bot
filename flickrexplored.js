@@ -456,18 +456,38 @@ var setupRandomHourText = function(msg) {
 };
 
 var setup = function(msg) {
-    if(!usersSettings[msg.from.id]){
-        let replyMarkup = getNoDataInlineKeyBoard();
-        bot.sendMessage(msg.from.id, setupText(),  { replyMarkup } );
-    }
-    // else if(usersSettings[msg.from.id].type === CB_CHOICE[0].type){ /* same hour */
-    //     let replyMarkup = getSameHourInlineKeyBoard();
-    //     bot.sendMessage(msg.from.id, setupSameHourText(), { replyMarkup } );
-    // }
-    else if(usersSettings[msg.from.id].type === CB_CHOICE[1].type){ /* random hour */
-        let replyMarkup = getRandomHourInlineKeyBoard();
-        bot.sendMessage(msg.from.id, setupRandomHourText(msg), { replyMarkup } );
-    }
+    async.waterfall(
+        [
+            getDB(),
+            getCollection(),
+            findOne(msg),
+            (db, coll, doc, cb) => {
+                if(!doc){
+                    insertNewDoc(db, coll, msg, true);
+                    cb(null, null);
+                } else {
+                    cb(null, null);
+                }
+            }
+        ],
+        function(err, result){
+            if(err){
+                console.log(err);
+            }
+            if(!usersSettings[msg.from.id]){
+                let replyMarkup = getNoDataInlineKeyBoard();
+                bot.sendMessage(msg.from.id, setupText(),  { replyMarkup } );
+            }
+            // else if(usersSettings[msg.from.id].type === CB_CHOICE[0].type){ /* same hour */
+            //     let replyMarkup = getSameHourInlineKeyBoard();
+            //     bot.sendMessage(msg.from.id, setupSameHourText(), { replyMarkup } );
+            // }
+            else if(usersSettings[msg.from.id].type === CB_CHOICE[1].type){ /* random hour */
+                let replyMarkup = getRandomHourInlineKeyBoard();
+                bot.sendMessage(msg.from.id, setupRandomHourText(msg), { replyMarkup } );
+            }
+        }
+    );
 };
 
 var removeFirstItem = function() {
