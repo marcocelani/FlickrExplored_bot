@@ -125,7 +125,7 @@ ${usage()}`);
 var stopBot = function(db, coll, doc){
     coll.updateOne(
         {_id: doc._id},
-        { $push: { commands: { cmd: '/stop', date: moment() }}},
+        { $push: { commands: { cmd: '/stop', date: moment() } }, $set: { userSetup: null } },
         (err, result) => {
             if(err){
                 logErr(`Error in stopBot:${err.message}`);
@@ -154,6 +154,8 @@ var getStop = function(msg){
         ],
         (err, result) => {
             if(result === true){
+                resetTime(msg);
+                usersSettings[msg.from.id] = null;
                 msg.reply.text(`Bye bye ${msg.from.username}`);
             }
             else {
