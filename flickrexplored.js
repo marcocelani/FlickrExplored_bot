@@ -262,7 +262,7 @@ var getPhotoIdsEngine = function(rpObj, dateStr, task_id){
             })
             .catch( err => {
                 logErr(`Error in getPhotoIdsEngine:${err.message} -> ${err.StatusCodeError}`);
-                cb(err);
+                cb(null, { date: dateStr, imgsArr: []});
             });
         }, getRandomSecond());
     };
@@ -310,7 +310,10 @@ var scrapeImg = function() {
                 }
                 logInfo(`tasksArr ended.`);
                 for(let i=result.length-1; i>=0; --i){
-                    imgsObj.imgs.push(result[i]);
+                    if(result[i].imgsArr.length != 0)
+                        imgsObj.imgs.push(result[i]);
+                    else 
+                        logInfo(`result[${i}]:imgsArr is empty.`);
                 }
                 imgsObj.lastUpdate = moment().subtract(1, 'days');
                 imgsObj.scrapeInProgress = false;
