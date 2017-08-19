@@ -43,7 +43,7 @@ var about = function(msg){
             ]
         ]
     );
-    return bot.sendMessage(msg.from.id, `${config.APP_NAME} made by @${config.TELEGRAM_USERNAME}.`, { replyMarkup }); 
+    return sendMessage(msg, `${config.APP_NAME} made by @${config.TELEGRAM_USERNAME}.`, { replyMarkup }); 
 };
 
 var usage = function() {
@@ -182,7 +182,7 @@ var getRandomic = function(upperBound){
 };
 
 var replyError = function(msg){
-    bot.sendMessage(msg.from.id, `Something goes wrong.`);
+    return sendMessage(msg, `Something goes wrong.`);
 };
 
 var getMsgError = function(response){
@@ -394,7 +394,7 @@ var getPhotoV2 = function(msg){
                     && response.photo.urls.url[0]
                     && response.photo.urls.url[0]._content) 
                 {
-                        bot.sendMessage(msg.from.id, response.photo.urls.url[0]._content);
+                        sendMessage(msg, response.photo.urls.url[0]._content);
                 } else {
                     replyError(msg);
                     logErr(console.log(response));
@@ -470,7 +470,7 @@ var setup = function(msg) {
         || msg.chat.type === 'supergroup'
         || msg.chat.type === 'channel')
     {
-        bot.sendMessage(msg.chat.id, `Setup command not allowed in groups.`); /* TODO? I don't know. */
+        sendMessage(msg, `Setup command not allowed in groups.`); /* TODO? I don't know. */
         return;
     }
     async.waterfall(
@@ -493,15 +493,15 @@ var setup = function(msg) {
             }
             if(!usersSettings[msg.from.id]){
                 let replyMarkup = getNoDataInlineKeyBoard();
-                bot.sendMessage(msg.from.id, setupText(),  { replyMarkup } );
+                sendMessage(msg, setupText(),  { replyMarkup } );
             }
             // else if(usersSettings[msg.from.id].type === CB_CHOICE[0].type){ /* same hour */
             //     let replyMarkup = getSameHourInlineKeyBoard();
-            //     bot.sendMessage(msg.from.id, setupSameHourText(), { replyMarkup } );
+            //     sendMessage(msg, setupSameHourText(), { replyMarkup } );
             // }
             else if(usersSettings[msg.from.id].type === CB_CHOICE[1].type){ /* random hour */
                 let replyMarkup = getRandomHourInlineKeyBoard();
-                bot.sendMessage(msg.from.id, setupRandomHourText(msg), { replyMarkup } );
+                sendMessage(msg, setupRandomHourText(msg), { replyMarkup } );
             }
         }
     );
@@ -663,7 +663,7 @@ var setRandomHourSetting = function(msg, hideMessage, restoring, nextPhotoTime){
         updateUserDBSetting(msg, userObj);
     
     if(!hideMessage)
-        bot.sendMessage(msg.from.id, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY hh:mm a')}`);    
+        sendMessage(msg, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY hh:mm a')}`);    
 };
 
 /* NOT USED */
@@ -677,14 +677,14 @@ var setSameHourSetting = function(msg) {
     usersSettings[msg.from.id] = userObj;
     updateUserDBSetting(msg, userObj);
 
-    bot.sendMessage(msg.from.id, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY hh:mm a')}`);
+    sendMessage(msg, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY hh:mm a')}`);
 };
 
 var resetSettting = function(msg, userObj){
     resetTime(msg);
     removeUserDBSetting(msg);
     usersSettings[msg.from.id] = null;
-    bot.sendMessage(msg.from.id, `Setting removed.`);
+    sendMessage(msg, `Setting removed.`);
 };
 
 var restoreUsersSetting = function() {
@@ -738,7 +738,7 @@ var setBotListeners = function() {
         } else if(msg.data === CB_CHOICE[2].type){ /* reset */
             resetSettting(msg);
         } else {
-            bot.sendMessage(msg.from.id, `Wrong choice: ${ msg.data }`);
+            sendMessage(msg.from.id, `Wrong choice: ${ msg.data }`);
         }
     });
 };
@@ -798,6 +798,30 @@ var findOne = function(msg){
             cb(null, db, coll, doc);
         });
     }
+};
+
+var sendMessage = function(msg, text, obj){
+    let id = -1;
+    if(!msg && !msg.chat && !msg.chat.type)
+        return;
+
+    if(
+        msg.chat 
+        && msg.chat.type && 
+        (msg.chat.type === 'group' 
+        || msg.chat.type === 'supergroup'
+        || msg.chat.type === 'channel'))
+    {
+        id = msg.chat.id;
+    }
+    else {
+        id = msg.from.id;
+    } 
+
+    if(obj)
+        return bot.sendMessage(id, text, obj);
+    else 
+        return bot.sendMessage(id, text);
 };
 
 const bot = getBot();
