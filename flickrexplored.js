@@ -195,7 +195,7 @@ var getMsgError = function(response){
 var log = function(type, msg){
     if(!type)
         type = 'INFO';
-    console.log(`[${type}][${moment().format('DD/MM/YYYY hh:mm:ss a')}] ${msg}`);
+    console.log(`[${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${msg}`);
 };
 
 var logInfo = function(msg){
@@ -462,7 +462,8 @@ var setupSameHourText = function() {
 };
 
 var setupRandomHourText = function(msg) {
-    return `Next photo on:${usersSettings[msg.from.id].nextPhotoTime.format('DD/MM/YYYY hh:mm a')}`;
+    //console.log(usersSettings[msg.from.id]);
+    return `Next photo on:${moment(usersSettings[msg.from.id].nextPhotoTime).format('DD/MM/YYYY HH:mm')}`;
 };
 
 var setup = function(msg) {
@@ -609,33 +610,32 @@ var removeUserDBSetting = function(msg){
 
 var getUserObj = function(type) {
     return {
-        nextPhotoTime: moment().local().add(1, 'minutes'),
         type: type
     };
 };
 
 var getTotMillis = function(userObj){
-    let totMillis = userObj.nextPhotoTime.valueOf() - moment().add(2, 'hours').valueOf();
+    let totMillis = userObj.nextPhotoTime.valueOf() - moment().utc().valueOf();
     if(totMillis < 0 || isNaN(totMillis) || !isFinite(totMillis))
         totMillis = 60 * 1000 * 24;
     return totMillis;
 };
 
-var settingInterval = function(msg, totMillis, userObj){
-    if(userObj.type === CB_CHOICE[1].type){
-        userObj.nextPhotoTime = moment().local().add(1, 'day').add(getRandomic(24 - moment().local().hours()) + 1, 'hours');
-        totMillis = getTotMillis(userObj);
-    }
+var getRandomicTimeHour = function(date){
+    if(!date)
+        return moment().add(1, 'day').hours(0).add(getRandomic(24) + 1, 'hours');
+    return date.add(1, 'day').hours(0).add(getRandomic(24) + 1, 'hours');
+};
+
+var settingInterval = function(msg, totMillis){
     return setInterval(function(){
-        if(userObj.scheduledTimer && userObj.type === CB_CHOICE[1].type){
-            clearInterval(userObj.scheduledTimer);   
-        }
+        resetTime(msg);
         getPhotoV2(msg);
-        if(usersSettings[msg.from.id]){
-            usersSettings[msg.from.id].nextPhoto = moment(usersSettings[msg.from.id].nextPhoto).add(2, 'minutes');
-            updateUserDBSetting(msg, userObj);
+        if(usersSettings[msg]){
+            usersSettings[msg].nextPhotoTime = getRandomicTimeHour(msg.message.date);
+            setRandomHourSetting(msg, true, true);
         }
-    }, totMillis , msg);
+    }, totMillis, msg);
 };
 
 var resetTime = function(msg){
@@ -644,26 +644,35 @@ var resetTime = function(msg){
     }
 };
 
-var setRandomHourSetting = function(msg, hideMessage, restoring, nextPhotoTime){
+var setRandomHourSetting = function(msg, hideMessage, restoring, noDBUpdate){
     resetTime(msg);
     let userObj = getUserObj(CB_CHOICE[1].type);
     
+    let userDate;
+    if(typeof(msg.message.date) === 'number')
+         userDate = moment.utc(moment.unix(msg.message.date).valueOf());
+    else 
+        userDate = moment.utc(moment(msg.message.date).valueOf());
+
     if(!restoring)
-        userObj.nextPhotoTime = moment().local().add(1, 'day').add(getRandomic(24 - moment().local().hours()) + 1, 'hours');
+        userObj.nextPhotoTime = getRandomicTimeHour(userDate); //userDate.add(1, 'day');//.add(getRandomic(24 - userDate.hours()) + 1, 'hours');
     else {
-        userObj.nextPhotoTime = moment(nextPhotoTime).local();
+        userObj.nextPhotoTime = userDate;
     }
 
     let totMillis = getTotMillis(userObj);
-  
-    userObj.scheduledTimer = settingInterval(msg, totMillis, userObj);
-    usersSettings[msg.from.id] = userObj;
     
-    if(!nextPhotoTime)
+    usersSettings[msg.from.id] = userObj;    
+    userObj.scheduledTimer = settingInterval(msg, totMillis);
+    
+    if(!noDBUpdate)
         updateUserDBSetting(msg, userObj);
     
     if(!hideMessage)
-        sendMessage(msg, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY hh:mm a')}`);    
+        sendMessage(msg, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY HH:mm')}`);
+    
+    if(hideMessage || restoring)
+        logInfo(`user ${msg.from.id} restored.`)
 };
 
 /* NOT USED */
@@ -672,12 +681,12 @@ var setSameHourSetting = function(msg) {
     let userObj = getUserObj();
     let totMillis = getTotMillis(userObj);
 
-    userObj.scheduledTimer = settingInterval(msg, totMillis, userObj);
+    userObj.scheduledTimer = settingInterval(msg, totMillis);
 
     usersSettings[msg.from.id] = userObj;
     updateUserDBSetting(msg, userObj);
 
-    sendMessage(msg, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY hh:mm a')}`);
+    sendMessage(msg, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY HH:mm')}`);
 };
 
 var resetSettting = function(msg, userObj){
@@ -710,21 +719,44 @@ var restoreUsersSetting = function() {
                 console.log(err);
                 return;
             }
-            for(let i=0; i<result.length; ++i){
-                if(moment.isMoment(result[i].userSetup.nextPhotoTime)
-                    && moment(result[i].userSetup.nextPhotoTime).isAfter(moment().local())) {
-                    logInfo(`restoring user:${result[i].id}`);
-                    setRandomHourSetting({ from: { id : result[i].id } }, true, true, result[i].userSetup.nextPhotoTime );
-                    logInfo(`restored user:${result[i].id}`);
-                } else {
-                    logInfo(`restoring user:${result[i].id}`);
-                    setTimeout(function(){
-                        getPhotoV2({ from: { id : result[i].id } });                        
-                        setRandomHourSetting({ from: { id : result[i].id } }, true);
-                        logInfo(`restored user:${result[i].id}`);
-                    }, 1000*60);
+
+            /* splitting */
+            let sidx = 0;
+            let size = 10;
+            let i = 0;
+
+            function compute_restoring() {
+                for(i = sidx; i < (sidx + size) && i < result.length; ++i){
+                    let msg = { 
+                        from: { id : result[i].id },
+                        message : { 
+                            date: result[i].userSetup.nextPhotoTime
+                        }
+                    };
+
+                    if(moment.isMoment(result[i].userSetup.nextPhotoTime)
+                        && moment(result[i].userSetup.nextPhotoTime).isAfter(moment()))
+                    {
+                        logInfo(`restoring user:${result[i].id}`);
+                        setRandomHourSetting(msg, true, true, true);
+                    } else {
+                        logInfo(`restoring user and sending photo:${result[i].id}`);
+                        msg.message.date = moment();
+                        setTimeout(function(){
+                            getPhotoV2(msg);                        
+                            setRandomHourSetting(msg, true);
+                        }, 1000*60);
+                    }
+                }
+
+                if(!(i >= result.length))
+                {
+                    sidx += size;
+                    process.nextTick(compute_restoring);
                 }
             }
+
+            compute_restoring();
         }
     );
 };
@@ -804,11 +836,10 @@ var sendMessage = function(msg, text, obj){
     let id = -1;
     if(!msg && !msg.chat && !msg.chat.type)
         return;
-
     if(
         msg.chat 
-        && msg.chat.type && 
-        (msg.chat.type === 'group' 
+        && msg.chat.type 
+        && (msg.chat.type === 'group' 
         || msg.chat.type === 'supergroup'
         || msg.chat.type === 'channel'))
     {
