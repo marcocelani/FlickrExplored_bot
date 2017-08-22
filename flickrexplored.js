@@ -348,6 +348,7 @@ var getPhotoV2 = function(msg){
         function(err, result){
             if(imgsObj.imgs.length == 0){
                 logErr(`imgs is empty`);
+                sendMessage(msg, `Images not available at moment. Please try later.`);
                 return;
             }
 
