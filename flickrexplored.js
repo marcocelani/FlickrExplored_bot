@@ -633,8 +633,7 @@ var settingInterval = function(msg, totMillis){
         resetTime(msg);
         getPhotoV2(msg);
         if(usersSettings[msg]){
-            usersSettings[msg].nextPhotoTime = getRandomicTimeHour(msg.message.date);
-            setRandomHourSetting(msg, true, true);
+            setRandomHourSetting(msg, true);
         }
     }, totMillis, msg);
 };
