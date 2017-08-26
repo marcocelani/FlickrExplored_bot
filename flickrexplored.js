@@ -28,6 +28,10 @@ var imgsObj = {
 /*************************/
 var usersSettings = {};
 /*************************/
+/* Users that are waiting for photo.
+/*************************/
+var waitingRoom = [];
+
 var CB_CHOICE = [ 
                   { type:'sameHour', text:'Every Day [same hour]'}, /* NOT USED */
                   { type: 'randomHour', text: 'Every Day' },
@@ -280,6 +284,9 @@ var scrapeImg = function() {
         logInfo(`Another scrape is in progress.`);
         return;
     }
+    
+    imgsObj.scrapeInProgress = true;
+    
     let mDate = moment(new Date()).subtract(1, 'days');
 
     if(imgsObj.lastUpdate){
@@ -288,8 +295,6 @@ var scrapeImg = function() {
             return;
         }
     }
-
-    imgsObj.scrapeInProgress = true;
 
     let flickrUrlsArr = [];
     let dayBefore = config.DAY_BEFORE - imgsObj.imgs.length;
@@ -325,6 +330,12 @@ var scrapeImg = function() {
                 }
                 imgsObj.lastUpdate = moment().subtract(1, 'days');
                 imgsObj.scrapeInProgress = false;
+
+                let item = waitingRoom.pop();
+                while(item){
+                    getPhotoV2(item);
+                    item = waitingRoom.pop();
+                } 
             }
         );
     } 
@@ -347,6 +358,12 @@ var getPhotoV2 = function(msg, fromSetting){
             }
         ],
         function(err, result){
+            if(imgsObj.scrapeInProgress){
+                //Go to waiting room.
+                waitingRoom.push(msg);
+                logInfo(`user ${msg.from.id} into waiting room.`);
+                return;
+            }
             if(imgsObj.imgs.length == 0){
                 logErr(`imgs is empty`);
                 sendMessage(msg, `Images not available at moment. Please try later.`);
@@ -746,10 +763,8 @@ var restoreUsersSetting = function() {
                     } else {
                         logInfo(`restoring user and sending photo:${result[i].id}`);
                         msg.message.date = moment();
-                        setTimeout(function(){
-                            getPhotoV2(msg);                        
-                            setRandomHourSetting(msg, true);
-                        }, 1000*60);
+                        getPhotoV2(msg);                        
+                        setRandomHourSetting(msg, true);
                     }
                 }
 
