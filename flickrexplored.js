@@ -302,6 +302,7 @@ var scrapeImg = function() {
         logInfo(`imgs needs update. dayBefore:${dayBefore}`)
         let tasksArr = [];
         let mDateStr = mDate.format('YYYY/MM/DD');
+
         for(let i=0; i<dayBefore; ++i) {
             tasksArr.push(getPhotoIdsEngine({ uri : flickrObj.FLICKR_EXPLORE_URL + 
                                                     mDateStr }, mDateStr, i));
@@ -329,7 +330,7 @@ var scrapeImg = function() {
     } 
 };
 
-var getPhotoV2 = function(msg){
+var getPhotoV2 = function(msg, fromSetting){
     async.waterfall(
         [
             getDB(),
@@ -396,6 +397,9 @@ var getPhotoV2 = function(msg){
                     && response.photo.urls.url[0]._content) 
                 {
                         sendMessage(msg, response.photo.urls.url[0]._content);
+                        
+                        if(fromSetting)
+                            sendMessage(msg, `Done. Next photo on ${usersSettings[msg.from.id].nextPhotoTime.format('DD/MM/YYYY HH:mm')} UTC.`);
                 } else {
                     replyError(msg);
                     logErr(console.log(response));
@@ -538,7 +542,7 @@ var getBot = function(){
         usePlugins: ['floodProtection'],
         pluginConfig: {
             floodProtection: {
-                interval: 2,
+                interval: 5,
                 message: 'Too many messages, relax!'
             }
         }
@@ -616,7 +620,7 @@ var getUserObj = function(type) {
 };
 
 var getTotMillis = function(userObj){
-    let totMillis = userObj.nextPhotoTime.valueOf() - moment().utc().valueOf();
+    let totMillis = userObj.nextPhotoTime.valueOf() - moment().valueOf();
     if(totMillis < 0 || isNaN(totMillis) || !isFinite(totMillis))
         totMillis = 60 * 1000 * 24;
     return totMillis;
@@ -629,10 +633,9 @@ var getRandomicTimeHour = function(date){
 };
 
 var settingInterval = function(msg, totMillis){
-    return setInterval(function(){
-        resetTime(msg);
+    return setTimeout(function(){
         getPhotoV2(msg);
-        if(usersSettings[msg]){
+        if(usersSettings[msg.from.id]){
             setRandomHourSetting(msg, true);
         }
     }, totMillis, msg);
@@ -640,7 +643,7 @@ var settingInterval = function(msg, totMillis){
 
 var resetTime = function(msg){
     if(usersSettings[msg.from.id] && usersSettings[msg.from.id].scheduledTimer){
-        clearInterval(usersSettings[msg.from.id].scheduledTimer);
+        clearTimeout(usersSettings[msg.from.id].scheduledTimer);
     }
 };
 
@@ -648,31 +651,32 @@ var setRandomHourSetting = function(msg, hideMessage, restoring, noDBUpdate){
     resetTime(msg);
     let userObj = getUserObj(CB_CHOICE[1].type);
     
-    let userDate;
-    if(typeof(msg.message.date) === 'number')
-         userDate = moment.utc(moment.unix(msg.message.date).valueOf());
-    else 
-        userDate = moment.utc(moment(msg.message.date).valueOf());
-
+    let userDate = moment(msg.message.date).toDate();
     if(!restoring)
-        userObj.nextPhotoTime = getRandomicTimeHour(userDate); //userDate.add(1, 'day');//.add(getRandomic(24 - userDate.hours()) + 1, 'hours');
+        userObj.nextPhotoTime = getRandomicTimeHour(moment()); //userDate.add(1, 'day');//.add(getRandomic(24 - userDate.hours()) + 1, 'hours');
     else {
-        userObj.nextPhotoTime = userDate;
+        userObj.nextPhotoTime = moment(userDate);
     }
 
     let totMillis = getTotMillis(userObj);
-    
+
+    if(!noDBUpdate)
+        updateUserDBSetting(msg, userObj);
+
     usersSettings[msg.from.id] = userObj;    
     userObj.scheduledTimer = settingInterval(msg, totMillis);
     
-    if(!noDBUpdate)
-        updateUserDBSetting(msg, userObj);
+    if(!hideMessage
+        && !restoring 
+        && !noDBUpdate)
+    {
+
+        getPhotoV2(msg, true);
+    }
     
-    if(!hideMessage)
-        sendMessage(msg, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY HH:mm')}`);
-    
-    if(hideMessage || restoring)
-        logInfo(`user ${msg.from.id} restored.`)
+    if(hideMessage && restoring)
+        logInfo(`user ${msg.from.id} restored.`);
+
 };
 
 /* NOT USED */
