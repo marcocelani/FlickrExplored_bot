@@ -1,2 +1,5 @@
 photo - Get random photo from Flickr's Explore.
 setup - Setup photo schedulation.
+help - show help message.
+about - show about information.
+stop - stop bot.
