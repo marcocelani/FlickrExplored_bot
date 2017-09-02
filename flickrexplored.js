@@ -8,10 +8,22 @@ const MongoClient = require('mongodb').MongoClient;
 
 const flickrObj = {
     ENDPOINT    : 'https://api.flickr.com/services/rest/',
-    METHODS     : ['flickr.interestingness.getList', 'flickr.people.getInfo', 'flickr.photos.getInfo'],
+    METHODS     : ['flickr.interestingness.getList', 
+                   'flickr.people.getInfo',
+                   'flickr.photos.getInfo',
+                   'flickr.photos.search'
+                  ],
     API_KEY     : config.FLICKR_KEY,
-    EXTRAS      : ['path_alias'],
-    PER_PAGE    : 1, /* Flickr max default: 500 */
+    EXTRAS      : ['path_alias',
+                   '',
+                   '',
+                   'can_comment,count_comments,count_faves,description,isfavorite,license,media,needs_interstitial,owner_name,path_alias,realname,rotation,url_c,url_l,url_m,url_n,url_q,url_s,url_sq,url_t,url_z'
+                ],
+    PER_PAGE    : [1, -1, -1, 20], /* Flickr max default: 500 */
+    PAGE        : [-1, -1, -1, 1],
+    SORT        : ['', '', '', 'data-taken-desc'],
+    PARSE_TAG   : ['', '', '', '1'],
+    CONTENT_TYPE: ['', '', '', '7'],
     FORMAT      : 'json',
     NOJSONCB    : 1,
     FLICKR_EXPLORE_URL: 'https://www.flickr.com/explore/'
@@ -143,6 +155,7 @@ var stopBot = function(db, coll, doc){
             } else {
                 logInfo(`User @${doc.username}: /stop command updated`);
             }
+            
             db.close();
         }
     );
@@ -341,6 +354,43 @@ var scrapeImg = function() {
     } 
 };
 
+var getPhotoUrlFromId = function(img_id) {
+    return function(cb){
+        rpOpt = {
+            uri: flickrObj.ENDPOINT,
+            qs: {
+                method: flickrObj.METHODS[2],
+                api_key: flickrObj.API_KEY,
+                photo_id: img_id,
+                format: flickrObj.FORMAT,
+                nojsoncallback: flickrObj.NOJSONCB,
+            },
+            json: true
+        };
+
+        rp(rpOpt)
+        .then( response => {
+            if(response.stat === 'fail'){
+                cb(null, { stat: 'fail', message: getMsgError(response) });
+            } else {
+                if(response.photo
+                    && response.photo.urls
+                    && response.photo.urls.url 
+                    && response.photo.urls.url[0]
+                    && response.photo.urls.url[0]._content) 
+                {
+                    cb(null, { stat: 'ok', url: response.photo.urls.url[0]._content });
+                } else {
+                    cb(null, { stat: 'fail', message: 'wrong response.'});
+                }
+            }
+        }).catch(err => {
+            logErr(err.message);
+            cb(err);
+        });
+    }
+};
+
 var getPhotoV2 = function(msg, fromSetting){
     async.waterfall(
         [
@@ -389,42 +439,27 @@ var getPhotoV2 = function(msg, fromSetting){
                 return;
             }
     
-            rpOpt = {
-                uri: flickrObj.ENDPOINT,
-                qs: {
-                    method: flickrObj.METHODS[2],
-                    api_key: flickrObj.API_KEY,
-                    photo_id: img_id,
-                    format: flickrObj.FORMAT,
-                    nojsoncallback: flickrObj.NOJSONCB,
-                },
-                json: true
-            };
-    
-            rp(rpOpt)
-            .then( response => {
-                if(response.stat === 'fail'){
-                    msg.reply.text(getMsgError(response));
-                    return;
+            async.waterfall(
+                [
+                    getPhotoUrlFromId(img_id)                    
+                ],
+                (err, result) => {
+                    if(err){
+                        replyError(msg);
+                        return;
+                    }
+                    if(result.stat === 'fail'){
+                        replyError(msg);
+                        console.log(result);
+                        return;
+                    }
+
+                    sendMessage(msg, result.url);
+
+                    if(fromSetting)
+                        sendMessage(msg, `Done. Next photo on ${usersSettings[msg.from.id].nextPhotoTime.format('DD/MM/YYYY HH:mm')} UTC.`);
                 }
-                if(response.photo
-                    && response.photo.urls
-                    && response.photo.urls.url 
-                    && response.photo.urls.url[0]
-                    && response.photo.urls.url[0]._content) 
-                {
-                        sendMessage(msg, response.photo.urls.url[0]._content);
-                        
-                        if(fromSetting)
-                            sendMessage(msg, `Done. Next photo on ${usersSettings[msg.from.id].nextPhotoTime.format('DD/MM/YYYY HH:mm')} UTC.`);
-                } else {
-                    replyError(msg);
-                    logErr(console.log(response));
-                }
-            }).catch(err => {
-                logErr(err.message);
-                replyError(msg);
-            });
+            );
         }
     );
 };
@@ -780,6 +815,82 @@ var restoreUsersSetting = function() {
     );
 };
 
+var flickrSearch = function(msg) {
+    if(!msg || !msg.query)
+        return;
+    
+    let query = msg.query.trim();
+
+    const INDEX = 3;
+
+    var rpObj = {
+        uri: flickrObj.ENDPOINT,
+        qs: {
+            method: flickrObj.METHODS[INDEX],
+            api_key: flickrObj.API_KEY,
+            text: query,
+            sort: flickrObj.SORT[INDEX],
+            parse_tag: flickrObj.PARSE_TAG[INDEX],
+            content_type: flickrObj.CONTENT_TYPE[INDEX],
+            extras: flickrObj.EXTRAS[INDEX],
+            per_page: flickrObj.PER_PAGE[INDEX],
+            page: flickrObj.PAGE[INDEX],
+            format: flickrObj.FORMAT,
+            nojsoncallback: flickrObj.NOJSONCB, 
+        },
+        json: true
+    };
+
+    rp(rpObj)
+    .then(response => {
+        if(response.stat === 'fail'){
+            logErr(getMsgError(response));
+            return;
+        }
+        
+        let photosArr = response.photos.photo;
+        
+        if(!photosArr)
+            return;
+
+        const answers = bot.answerList(msg.id, {cacheTime: 60});
+
+        async.each(photosArr,
+            (photo, cb) => {
+                async.waterfall(
+                    [
+                        getPhotoUrlFromId(photo.id)                    
+                    ],
+                    (err, result) => { 
+                        if(result.stat === 'fail'){
+                            console.log(result);
+                            cb(null);
+                            return;
+                        }
+                        
+                        answers.addPhoto(
+                        {
+                            id: photo.id,
+                            title: photo.title,
+                            photo_url: photo.url_l,
+                            photo_width: parseInt(photo.width_z),
+                            photo_height: parseInt(photo.height_z),
+                            thumb_url: photo.url_z,
+                            input_message_content: { message_text: result.url }
+                        });
+
+                        cb(null);
+                    });
+            },
+            (err) => {
+                return bot.answerQuery(answers)
+                .then( result => { })
+                .catch( err => { logErr(err.message); });
+            }  
+        );
+    });
+}
+
 var setBotListeners = function() {
     bot.on('callbackQuery', msg => {
         if(msg.data === CB_CHOICE[0].type){ /* same hour */
@@ -802,6 +913,7 @@ var setBotCommand = function(){
     bot.on('/stats', (msg) => msg.reply.text(getStats(msg)));
     bot.on('/stop', (msg) => getStop(msg));
     bot.on('/setup', (msg) => setup(msg));
+    bot.on('inlineQuery', (msg) => flickrSearch(msg) );
 };
 
 var getDB = function() {
