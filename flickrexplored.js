@@ -259,39 +259,6 @@ var getRandomSecond = function(){
     return getRandomic( ((config.TASK_DELAY || config.TASK_DELAY > 0) ? config.TASK_DELAY : 60) * 1000);
 };
 
-var getPhotoIdsEngine = function(rpObj, dateStr, task_id){
-    if(!rpObj){
-        return function(cb){
-            cb(new Error(`Wrong rpObj.`));
-        };
-    }
-
-    return function(cb) {
-        setTimeout(function(){ /* DOS avoiding... */
-            logInfo(`task ${task_id} started.`)
-            let imgsArr = [];
-            let parser = new htmlparser.Parser(
-            {
-                onopentag: function(name, attribs){
-                    scrapeEngine(name, attribs, imgsArr);
-                }
-            });
-            
-            rp(rpObj)
-            .then( response => {
-                parser.write(response);
-                parser.end();
-                logInfo(`task ${task_id} ended.`);
-                cb(null, { date: dateStr, imgsArr: imgsArr });
-            })
-            .catch( err => {
-                logErr(`Error in getPhotoIdsEngine:${err.message} -> ${err.StatusCodeError}`);
-                cb(null, { date: dateStr, imgsArr: []});
-            });
-        }, getRandomSecond());
-    };
-};
-
 var scrapeImg = function() {
     if(imgsObj.scrapeInProgress){
         logInfo(`Another scrape is in progress.`);
@@ -300,7 +267,7 @@ var scrapeImg = function() {
     
     imgsObj.scrapeInProgress = true;
     
-    let mDate = moment(new Date()).subtract(1, 'days');
+    let mDate = moment().subtract(1, 'days');
 
     if(imgsObj.lastUpdate){
         if(mDate.format('YYYY/DD/MM') === imgsObj.lastUpdate.format('YYYY/DD/MM')) {
@@ -318,37 +285,54 @@ var scrapeImg = function() {
     }
     if(dayBefore != 0){
         logInfo(`imgs needs update. dayBefore:${dayBefore}`)
-        let tasksArr = [];
         let mDateStr = mDate.format('YYYY/MM/DD');
 
-        for(let i=0; i<dayBefore; ++i) {
-            tasksArr.push(getPhotoIdsEngine({ uri : flickrObj.FLICKR_EXPLORE_URL + 
-                                                    mDateStr }, mDateStr, i));
-            mDateStr = mDate.subtract(1, 'days').format('YYYY/MM/DD');
+        let rpOptArr = [];
+        for(let i=0; i<dayBefore; ++i){
+            rpOptArr.push({ task_id: i, 
+                            dateStr: mDateStr,
+                            rpOpt: { uri : flickrObj.FLICKR_EXPLORE_URL + mDateStr } 
+                        });
+            mDateStr = mDate.subtract(1, 'days').format('YYYY/MM/DD');            
         }
-        logInfo('starting parallel tasks...');
-        async.parallel(tasksArr,
-            function(err, result){  
-                if(err){
-                    logErr(`Something goes wrong:${err.message}.`);
-                    imgsObj.scrapeInProgress = false;
+        
+        logInfo('starting parallel tasks...');        
+        async.eachLimit(rpOptArr, 2, 
+            (rpOptItem, cb) => {
+                if(!rpOptItem.rpOpt){
+                    cb(new Error(`Wrong rpOpt.`));
                     return;
                 }
-                logInfo(`tasksArr ended.`);
-                for(let i=result.length-1; i>=0; --i){
-                    if(result[i].imgsArr.length != 0)
-                        imgsObj.imgs.push(result[i]);
-                    else 
-                        logInfo(`result[${i}]:imgsArr is empty.`);
-                }
-                imgsObj.lastUpdate = moment().subtract(1, 'days');
-                imgsObj.scrapeInProgress = false;
 
-                let item = waitingRoom.pop();
-                while(item){
-                    getPhotoV2(item);
-                    item = waitingRoom.pop();
-                } 
+                logInfo(`task ${rpOptItem.task_id} started.`)
+                let imgsArr = [];
+                let parser = new htmlparser.Parser(
+                {
+                    onopentag: function(name, attribs){
+                        scrapeEngine(name, attribs, imgsArr);
+                    }
+                });
+
+                rp(rpOptItem.rpOpt)
+                .then( response => {
+                    parser.write(response);
+                    parser.end();
+                    logInfo(`task ${rpOptItem.task_id} ended.`);
+                    imgsObj.imgs.push({ date: rpOptItem.dateStr, imgsArr: imgsArr });
+                    cb(null);
+                })
+                .catch( err => {
+                    logErr(`Error in getPhotoIdsEngine:${err.message} -> ${err.StatusCodeError}`);
+                    cb(err);
+                });
+            }, 
+            (err) => {
+                if(err){
+                    logErr(`Something goes wrong:${err.message}.`);
+                }
+                imgsObj.lastUpdate = moment();
+                imgsObj.scrapeInProgress = false;
+                logInfo('Tasks completed.');
             }
         );
     } 
