@@ -323,7 +323,7 @@ var scrapeImg = function() {
                 })
                 .catch( err => {
                     logErr(`Error in getPhotoIdsEngine:${err.message} -> ${err.StatusCodeError}`);
-                    cb(err);
+                    cb(null);
                 });
             }, 
             (err) => {
