@@ -333,6 +333,29 @@ var scrapeImg = function() {
                 imgsObj.lastUpdate = moment();
                 imgsObj.scrapeInProgress = false;
                 logInfo('Tasks completed.');
+                
+                let count = 0;
+                let item = waitingRoom.pop();
+                
+                if(item)
+                    logInfo('Empty the waiting room.');                
+                
+                function empty_waiting_room(){
+                    while(item && count < 10){
+                        ++count;
+                        getPhotoV2(item);
+                        item = waitingRoom.pop();
+                    }
+
+                    if(item){
+                        count = 0;
+                        process.nextTick(empty_waiting_room);
+                    } else {
+                        logInfo('Waiting room is empty.');                                        
+                    }
+                }
+
+                empty_waiting_room();
             }
         );
     } 
