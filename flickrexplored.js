@@ -21,9 +21,9 @@ const flickrObj = {
                 ],
     PER_PAGE    : [1, -1, -1, 20], /* Flickr max default: 500 */
     PAGE        : [-1, -1, -1, 1],
-    SORT        : ['', '', '', 'data-taken-desc'],
+    SORT        : ['', '', '', 'relevance'],
     PARSE_TAG   : ['', '', '', '1'],
-    CONTENT_TYPE: ['', '', '', '7'],
+    CONTENT_TYPE: ['', '', '', '1'],
     FORMAT      : 'json',
     NOJSONCB    : 1,
     FLICKR_EXPLORE_URL: 'https://www.flickr.com/explore/'
@@ -875,14 +875,32 @@ var flickrSearch = function(msg) {
                             return;
                         }
                         
-                        answers.addPhoto(
-                        {
+                        let url_arr = [];
+                        if(photo.width_s && photo.height_s)
+                            url_arr.push({url: photo.url_s, width: photo.width_s, height: photo.height_s });
+                        if(photo.width_m && photo.height_m)
+                            url_arr.push({url: photo.url_m, width: photo.width_m, height: photo.height_m });
+                        if(photo.width_n && photo.height_n)
+                            url_arr.push({url: photo.url_n, width: photo.width_n, height: photo.height_n });
+                        if(photo.width_z && photo.height_z)
+                            url_arr.push({url: photo.url_z, width: photo.width_z, height: photo.height_z });
+                        if(photo.width_c && photo.height_c)
+                            url_arr.push({url: photo.url_c, width: photo.width_c, height: photo.height_c });
+                        if(photo.width_l && photo.height_l)
+                            url_arr.push({url: photo.url_l, width: photo.width_l, height: photo.height_l });
+                        if(photo.width_o && photo.height_o)
+                            url_arr.push({url: photo.url_o, width: photo.width_o, height: photo.height_o });
+                        
+                        if(url_arr.length == 0)
+                            cb(null);
+
+                        answers.addPhoto({
                             id: photo.id,
                             title: photo.title,
-                            photo_url: photo.url_l,
-                            photo_width: parseInt(photo.width_z),
-                            photo_height: parseInt(photo.height_z),
-                            thumb_url: photo.url_z,
+                            photo_url: url_arr[0].url,
+                            photo_width: parseInt(url_arr[0].width),
+                            photo_height: parseInt(url_arr[0].height),
+                            thumb_url: url_arr[0].url,
                             input_message_content: { message_text: result.url }
                         });
 
@@ -890,9 +908,9 @@ var flickrSearch = function(msg) {
                     });
             },
             (err) => {
-                return bot.answerQuery(answers)
+                bot.answerQuery(answers)
                 .then( result => { })
-                .catch( err => { logErr(err.message); });
+                .catch( err => { console.log(`[${moment().format('DD/MM/YYYY HH:mm')}] flickrSearchErr:`, err); });
             }  
         );
     });
