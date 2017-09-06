@@ -856,13 +856,24 @@ var getPhysicUrl = function(farm_id, server_id, id, secret, size){
 };
 
 var flickrSearch = function(msg) {
-    if(!msg || typeof(msg.query) !== 'string')
+    if(!msg)
         return;
 
-    let query = msg.query.trim();
+    let isGeoSearch = msg.location          && 
+                      msg.location.latitude && 
+                      msg.location.longitude;
+
+    let query = '';
+    if(!isGeoSearch){
+        query = msg.query.trim();
+    }
+
     const answers = bot.answerList(msg.id, {cacheTime: 60});
 
-    if(query === '' && imgsObj.imgs.length > 0){
+    if(query === '' 
+       && imgsObj.imgs.length > 0
+       && !isGeoSearch)
+    {
         let idArr = imgsObj.imgs[getRandomic(imgsObj.imgs.length - 1)].imgsArr;
                            
         async.each(idArr,
@@ -885,7 +896,6 @@ var flickrSearch = function(msg) {
                             thumb_url: result.url_physic_z,
                             input_message_content: { message_text: result.url }
                         });
-                        
                         cb(null);
                     });
             },
@@ -902,6 +912,7 @@ var flickrSearch = function(msg) {
 
         return;
     }
+
     const INDEX = 3;
 
     var rpObj = {
@@ -922,6 +933,13 @@ var flickrSearch = function(msg) {
         json: true
     };
 
+    if(isGeoSearch)
+    {
+        rpObj.qs.lat = msg.location.latitude;
+        rpObj.qs.lon = msg.location.longitude;
+        rpObj.qs.per_page = 5;
+    }
+    
     rp(rpObj)
     .then(response => {
         if(response.stat === 'fail'){
@@ -952,24 +970,30 @@ var flickrSearch = function(msg) {
                             cb(null);
                             return;
                         }
-
-                        answers.addPhoto({
-                            id: photo.id,
-                            title: photo.title,
-                            photo_url: url_arr[0].url,
-                            photo_width: parseInt(url_arr[0].width),
-                            photo_height: parseInt(url_arr[0].height),
-                            thumb_url: url_arr[0].url,
-                            input_message_content: { message_text: result.url }
-                        });
+                        
+                        if(!isGeoSearch){
+                            answers.addPhoto({
+                                id: photo.id,
+                                title: photo.title,
+                                photo_url: url_arr[0].url,
+                                photo_width: parseInt(url_arr[0].width),
+                                photo_height: parseInt(url_arr[0].height),
+                                thumb_url: url_arr[0].url,
+                                input_message_content: { message_text: result.url }
+                            });
+                        } else {
+                            sendMessage(msg, result.url)
+                        }
 
                         cb(null);
                     });
             },
             (err) => {
-                bot.answerQuery(answers)
-                .then( result => { })
-                .catch( err => { console.log(`[${moment().format('DD/MM/YYYY HH:mm')}] flickrSearchErr:`, err); });
+                if(!isGeoSearch){
+                    bot.answerQuery(answers)
+                    .then( result => { })
+                    .catch( err => { console.log(`[${moment().format('DD/MM/YYYY HH:mm')}] flickrSearchErr:`, err); });
+                }   
             }  
         );
     });
@@ -998,6 +1022,7 @@ var setBotCommand = function(){
     bot.on('/stop', (msg) => getStop(msg));
     bot.on('/setup', (msg) => setup(msg));
     bot.on('inlineQuery', (msg) => flickrSearch(msg) );
+    bot.on('location', (msg) => { flickrSearch(msg); });
 };
 
 var getDB = function() {
