@@ -1025,7 +1025,7 @@ var setBotCommand = function(){
     bot.on('/stats', (msg) => msg.reply.text(getStats(msg)));
     bot.on('/stop', (msg) => getStop(msg));
     bot.on('/setup', (msg) => setup(msg));
-    bot.on('inlineQuery', (msg) => flickrSearch(msg) );
+    bot.on('inlineQuery', (msg) => { flickrSearch(msg); });
     bot.on('location', (msg) => { flickrSearch(msg); });
 };
 
@@ -1084,8 +1084,7 @@ var isFromGroup = function(msg){
         || msg.chat.type === 'supergroup'
         || msg.chat.type === 'channel')
     ) return true;
-    else 
-        return false;
+    return false;
 
 };
 
@@ -1109,14 +1108,7 @@ var sendMessage = function(msg, text, obj){
 
 const bot = getBot();
 
-var init = function(){
-    setBotCommand();
-    setBotListeners();
-
-    scrapeImg();
-
-    restoreUsersSetting();
-
+var intervalledTask = function() {
     setInterval(() => {
         removeFirstItem()
     },
@@ -1125,6 +1117,13 @@ var init = function(){
     setInterval(() => {
         scrapeImg()
     },config.IMGS_REFRESH_TIME);
+};
+
+var init = function(){
+    setBotCommand();
+    setBotListeners();
+    scrapeImg();
+    restoreUsersSetting();
 
     bot.start();
 };
