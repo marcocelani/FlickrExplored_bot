@@ -22,7 +22,8 @@ var config = {
     MONGODB             : {
         connectionStr : 'mongodb://localhost:27017/yourproject',
         usersCollection : 'your_collection'
-    }
+    },
+    MAX_SEARCH_ITEM     : 25
 }
 
 exports.config = config;

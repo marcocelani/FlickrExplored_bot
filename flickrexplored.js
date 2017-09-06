@@ -19,7 +19,7 @@ const flickrObj = {
                    '',
                    'can_comment,count_comments,count_faves,description,isfavorite,license,media,needs_interstitial,owner_name,path_alias,realname,rotation,url_c,url_l,url_m,url_n,url_q,url_s,url_sq,url_t,url_z'
                 ],
-    PER_PAGE    : [1, -1, -1, 20], /* Flickr max default: 500 */
+    PER_PAGE    : [1, -1, -1, config.MAX_SEARCH_ITEM], /* Flickr max default: 500 */
     PAGE        : [-1, -1, -1, 1],
     SORT        : ['', '', '', 'relevance'],
     PARSE_TAG   : ['', '', '', '1'],
@@ -386,7 +386,16 @@ var getPhotoUrlFromId = function(img_id) {
                     && response.photo.urls.url[0]
                     && response.photo.urls.url[0]._content) 
                 {
-                    cb(null, { stat: 'ok', url: response.photo.urls.url[0]._content });
+                    cb(null, { stat: 'ok', 
+                               url: response.photo.urls.url[0]._content,
+                               url_physic_z: getPhysicUrl(
+                                                         response.photo.farm, 
+                                                         response.photo.server,
+                                                         response.photo.id,
+                                                         response.photo.secret,
+                                                         'z'
+                                                        )
+                             });
                 } else {
                     cb(null, { stat: 'fail', message: 'wrong response.'});
                 }
@@ -822,12 +831,77 @@ var restoreUsersSetting = function() {
     );
 };
 
-var flickrSearch = function(msg) {
-    if(!msg || !msg.query)
-        return;
-    
-    let query = msg.query.trim();
+var buildUrlArr = function(photo){
+    let url_arr = [];
+    if(photo.width_m && photo.height_m)
+        url_arr.push({url: photo.url_m, width: photo.width_m, height: photo.height_m });
+    if(photo.width_n && photo.height_n)
+        url_arr.push({url: photo.url_n, width: photo.width_n, height: photo.height_n });
+    if(photo.width_z && photo.height_z)
+        url_arr.push({url: photo.url_z, width: photo.width_z, height: photo.height_z });
+    if(photo.width_c && photo.height_c)
+        url_arr.push({url: photo.url_c, width: photo.width_c, height: photo.height_c });
+    if(photo.width_l && photo.height_l)
+        url_arr.push({url: photo.url_l, width: photo.width_l, height: photo.height_l });
+    if(photo.width_o && photo.height_o)
+        url_arr.push({url: photo.url_o, width: photo.width_o, height: photo.height_o });
+    return url_arr;
+};
 
+var getPhysicUrl = function(farm_id, server_id, id, secret, size){
+    if(!size)
+        return `https://farm${farm_id}.staticflickr.com/${server_id}/${id}_${secret}.jpg`;
+    else 
+        return `https://farm${farm_id}.staticflickr.com/${server_id}/${id}_${secret}_${size}.jpg`;
+};
+
+var flickrSearch = function(msg) {
+    if(!msg || typeof(msg.query) !== 'string')
+        return;
+
+    let query = msg.query.trim();
+    const answers = bot.answerList(msg.id, {cacheTime: 60});
+
+    if(query === '' && imgsObj.imgs.length > 0){
+        let idArr = imgsObj.imgs[getRandomic(imgsObj.imgs.length - 1)].imgsArr;
+                           
+        async.each(idArr,
+            (id, cb) => {
+                async.waterfall(
+                    [
+                        getPhotoUrlFromId(id)                    
+                    ],
+                    (err, result) => { 
+                        if(result.stat === 'fail'){
+                            console.log(result);
+                            cb(null);
+                            return;
+                        }
+                        
+                        answers.addPhoto({
+                            id: id,
+                            title: result.title,
+                            photo_url: result.url_physic_z,
+                            thumb_url: result.url_physic_z,
+                            input_message_content: { message_text: result.url }
+                        });
+                        
+                        cb(null);
+                    });
+            },
+            (err) => {
+                if(err){
+                    console.log(err);
+                    return;
+                }
+                bot.answerQuery(answers)
+                .then( result => { })
+                .catch( err => { console.log(`[${moment().format('DD/MM/YYYY HH:mm')}] flickrSearchErr:`, err); });
+            }
+        );
+
+        return;
+    }
     const INDEX = 3;
 
     var rpObj = {
@@ -860,8 +934,6 @@ var flickrSearch = function(msg) {
         if(!photosArr)
             return;
 
-        const answers = bot.answerList(msg.id, {cacheTime: 60});
-
         async.each(photosArr,
             (photo, cb) => {
                 async.waterfall(
@@ -875,24 +947,11 @@ var flickrSearch = function(msg) {
                             return;
                         }
                         
-                        let url_arr = [];
-                        if(photo.width_s && photo.height_s)
-                            url_arr.push({url: photo.url_s, width: photo.width_s, height: photo.height_s });
-                        if(photo.width_m && photo.height_m)
-                            url_arr.push({url: photo.url_m, width: photo.width_m, height: photo.height_m });
-                        if(photo.width_n && photo.height_n)
-                            url_arr.push({url: photo.url_n, width: photo.width_n, height: photo.height_n });
-                        if(photo.width_z && photo.height_z)
-                            url_arr.push({url: photo.url_z, width: photo.width_z, height: photo.height_z });
-                        if(photo.width_c && photo.height_c)
-                            url_arr.push({url: photo.url_c, width: photo.width_c, height: photo.height_c });
-                        if(photo.width_l && photo.height_l)
-                            url_arr.push({url: photo.url_l, width: photo.width_l, height: photo.height_l });
-                        if(photo.width_o && photo.height_o)
-                            url_arr.push({url: photo.url_o, width: photo.width_o, height: photo.height_o });
-                        
-                        if(url_arr.length == 0)
+                        let url_arr = buildUrlArr(photo);
+                        if(url_arr.length == 0) {
                             cb(null);
+                            return;
+                        }
 
                         answers.addPhoto({
                             id: photo.id,
