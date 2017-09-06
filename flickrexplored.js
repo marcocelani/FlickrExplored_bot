@@ -162,6 +162,10 @@ var stopBot = function(db, coll, doc){
 };
 
 var getStop = function(msg){
+    if(isFromGroup(msg)){
+        sendMessage(msg, 'Stops command not allowed to group.');
+        return;
+    }
     async.waterfall(
         [
             getDB(),
@@ -1072,16 +1076,24 @@ var findOne = function(msg){
     }
 };
 
+var isFromGroup = function(msg){
+    if(msg 
+        && msg.chat 
+        && msg.chat.type 
+        && (msg.chat.type === 'group' 
+        || msg.chat.type === 'supergroup'
+        || msg.chat.type === 'channel')
+    ) return true;
+    else 
+        return false;
+
+};
+
 var sendMessage = function(msg, text, obj){
     let id = -1;
     if(!msg && !msg.chat && !msg.chat.type)
         return;
-    if(
-        msg.chat 
-        && msg.chat.type 
-        && (msg.chat.type === 'group' 
-        || msg.chat.type === 'supergroup'
-        || msg.chat.type === 'channel'))
+    if(isFromGroup(msg))
     {
         id = msg.chat.id;
     }
