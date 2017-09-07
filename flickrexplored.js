@@ -871,7 +871,7 @@ var isGeoSearch = function(msg){
 };
 
 var prepareRPSearchObj = function(text){
-    const INDEX = 3;
+    const INDEX = 3; //photo.search
     return {
         uri: flickrObj.ENDPOINT,
         qs: {
@@ -943,9 +943,11 @@ var searchPhoto = function(msg, rpObj, answers){
                     });
             },
             (err) => {
-                bot.answerQuery(answers)
-                .then( result => { })
-                .catch( err => { console.log(`[${moment().format('DD/MM/YYYY HH:mm')}] flickrSearchErr:`, err); });   
+                if(answers){
+                    bot.answerQuery(answers)
+                    .then( result => { })
+                    .catch( err => { console.log(`[${moment().format('DD/MM/YYYY HH:mm')}] flickrSearchErr:`, err); });
+                }
             }  
         );
     });
@@ -955,9 +957,10 @@ var flickrGeoSearch = function(msg) {
     if(!isGeoSearch(msg))
         return;
 
-    let rpObj = prepareRPSearchObj
+    let rpObj = prepareRPSearchObj()
     rpObj.qs.lat = msg.location.latitude;
     rpObj.qs.lon = msg.location.longitude;
+    rpObj.qs.per_page = 5;
     searchPhoto(msg, rpObj);
 };
 
@@ -965,7 +968,9 @@ var flickrSearch = function(msg) {
     if(!msg)
         return;
 
-    let query = msg.query.trim();
+    let query = '';
+    if(msg.query) 
+        query = msg.query.trim();
 
     const answers = bot.answerList(msg.id, {cacheTime: 60});
 
@@ -1037,7 +1042,7 @@ var setBotCommand = function(){
     bot.on('/stop', (msg) => getStop(msg));
     bot.on('/setup', (msg) => setup(msg));
     bot.on('inlineQuery', (msg) => { flickrSearch(msg); });
-    bot.on('location', (msg) => { flickrSearch(msg); });
+    bot.on('location', (msg) => { flickrGeoSearch(msg); });
 };
 
 var getDB = function() {
