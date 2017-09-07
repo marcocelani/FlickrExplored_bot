@@ -398,7 +398,9 @@ var getPhotoUrlFromId = function(img_id) {
                                                          response.photo.id,
                                                          response.photo.secret,
                                                          'z'
-                                                        )
+                                                        ),
+                                title: (response.photo.title 
+                                        && response.photo.title._content) ? response.photo.title._content : ''
                              });
                 } else {
                     cb(null, { stat: 'fail', message: 'wrong response.'});
@@ -859,24 +861,116 @@ var getPhysicUrl = function(farm_id, server_id, id, secret, size){
         return `https://farm${farm_id}.staticflickr.com/${server_id}/${id}_${secret}_${size}.jpg`;
 };
 
+var isGeoSearch = function(msg){
+    if(!msg && 
+        !msg.location       && 
+        !msg.location.latitude && 
+        !msg.location.longitude)
+        return false;
+    return true;
+};
+
+var prepareRPSearchObj = function(text){
+    const INDEX = 3;
+    return {
+        uri: flickrObj.ENDPOINT,
+        qs: {
+            method: flickrObj.METHODS[INDEX],
+            api_key: flickrObj.API_KEY,
+            text: (text) ? text : '',
+            sort: flickrObj.SORT[INDEX],
+            parse_tag: flickrObj.PARSE_TAG[INDEX],
+            content_type: flickrObj.CONTENT_TYPE[INDEX],
+            extras: flickrObj.EXTRAS[INDEX],
+            per_page: flickrObj.PER_PAGE[INDEX],
+            page: flickrObj.PAGE[INDEX],
+            format: flickrObj.FORMAT,
+            nojsoncallback: flickrObj.NOJSONCB, 
+        },
+        json: true
+    };
+};
+
+var searchPhoto = function(msg, rpObj, answers){
+    if(!msg && rpObj)
+        return;
+
+    rp(rpObj)
+    .then(response => {
+        if(response.stat === 'fail'){
+            logErr(getMsgError(response));
+            return;
+        }
+        
+        let photosArr = response.photos.photo;
+        
+        if(!photosArr)
+            return;
+
+        async.each(photosArr,
+            (photo, cb) => {
+                async.waterfall(
+                    [
+                        getPhotoUrlFromId(photo.id)                    
+                    ],
+                    (err, result) => { 
+                        if(result.stat === 'fail'){
+                            console.log(result);
+                            cb(null);
+                            return;
+                        }
+                        
+                        let url_arr = buildUrlArr(photo);
+                        if(url_arr.length == 0) {
+                            cb(null);
+                            return;
+                        }
+                        if(answers){
+                            answers.addPhoto({
+                                id: photo.id,
+                                title: photo.title,
+                                photo_url: url_arr[0].url,
+                                photo_width: parseInt(url_arr[0].width),
+                                photo_height: parseInt(url_arr[0].height),
+                                thumb_url: url_arr[0].url,
+                                input_message_content: { message_text: result.url }
+                            });
+                        } else {
+                            sendMessage(msg, result.url);
+                        }
+
+                        cb(null);
+                    });
+            },
+            (err) => {
+                bot.answerQuery(answers)
+                .then( result => { })
+                .catch( err => { console.log(`[${moment().format('DD/MM/YYYY HH:mm')}] flickrSearchErr:`, err); });   
+            }  
+        );
+    });
+};
+
+var flickrGeoSearch = function(msg) {
+    if(!isGeoSearch(msg))
+        return;
+
+    let rpObj = prepareRPSearchObj
+    rpObj.qs.lat = msg.location.latitude;
+    rpObj.qs.lon = msg.location.longitude;
+    searchPhoto(msg, rpObj);
+};
+
 var flickrSearch = function(msg) {
     if(!msg)
         return;
 
-    let isGeoSearch = msg.location          && 
-                      msg.location.latitude && 
-                      msg.location.longitude;
-
-    let query = '';
-    if(!isGeoSearch){
-        query = msg.query.trim();
-    }
+    let query = msg.query.trim();
 
     const answers = bot.answerList(msg.id, {cacheTime: 60});
 
     if(query === '' 
-       && imgsObj.imgs.length > 0
-       && !isGeoSearch)
+       && imgsObj.imgs.length > 0)
     {
         let idArr = imgsObj.imgs[getRandomic(imgsObj.imgs.length - 1)].imgsArr;
                            
@@ -917,90 +1011,7 @@ var flickrSearch = function(msg) {
         return;
     }
 
-    const INDEX = 3;
-
-    var rpObj = {
-        uri: flickrObj.ENDPOINT,
-        qs: {
-            method: flickrObj.METHODS[INDEX],
-            api_key: flickrObj.API_KEY,
-            text: query,
-            sort: flickrObj.SORT[INDEX],
-            parse_tag: flickrObj.PARSE_TAG[INDEX],
-            content_type: flickrObj.CONTENT_TYPE[INDEX],
-            extras: flickrObj.EXTRAS[INDEX],
-            per_page: flickrObj.PER_PAGE[INDEX],
-            page: flickrObj.PAGE[INDEX],
-            format: flickrObj.FORMAT,
-            nojsoncallback: flickrObj.NOJSONCB, 
-        },
-        json: true
-    };
-
-    if(isGeoSearch)
-    {
-        rpObj.qs.lat = msg.location.latitude;
-        rpObj.qs.lon = msg.location.longitude;
-        rpObj.qs.per_page = 5;
-    }
-    
-    rp(rpObj)
-    .then(response => {
-        if(response.stat === 'fail'){
-            logErr(getMsgError(response));
-            return;
-        }
-        
-        let photosArr = response.photos.photo;
-        
-        if(!photosArr)
-            return;
-
-        async.each(photosArr,
-            (photo, cb) => {
-                async.waterfall(
-                    [
-                        getPhotoUrlFromId(photo.id)                    
-                    ],
-                    (err, result) => { 
-                        if(result.stat === 'fail'){
-                            console.log(result);
-                            cb(null);
-                            return;
-                        }
-                        
-                        let url_arr = buildUrlArr(photo);
-                        if(url_arr.length == 0) {
-                            cb(null);
-                            return;
-                        }
-                        
-                        if(!isGeoSearch){
-                            answers.addPhoto({
-                                id: photo.id,
-                                title: photo.title,
-                                photo_url: url_arr[0].url,
-                                photo_width: parseInt(url_arr[0].width),
-                                photo_height: parseInt(url_arr[0].height),
-                                thumb_url: url_arr[0].url,
-                                input_message_content: { message_text: result.url }
-                            });
-                        } else {
-                            sendMessage(msg, result.url)
-                        }
-
-                        cb(null);
-                    });
-            },
-            (err) => {
-                if(!isGeoSearch){
-                    bot.answerQuery(answers)
-                    .then( result => { })
-                    .catch( err => { console.log(`[${moment().format('DD/MM/YYYY HH:mm')}] flickrSearchErr:`, err); });
-                }   
-            }  
-        );
-    });
+    searchPhoto(msg, prepareRPSearchObj(query), answers);
 }
 
 var setBotListeners = function() {
