@@ -421,10 +421,14 @@ var getPhotoV2 = function(msg, fromSetting){
             findOne(msg),
             (db, coll, doc, cb) => {
                 if(!doc){
-                    insertNewDoc(db, coll, msg, true);
+                    insertNewDoc(db, coll, msg, (imgsObj.scrapeInProgress === true) ? false : true);
                     cb(null, null);
                 } else {
-                    updateGetCount(db, coll, doc);
+                    if(imgsObj.scrapeInProgress === true){
+                        db.close();
+                    } else {
+                        updateGetCount(db, coll, doc);
+                    }
                     cb(null, null);
                 }
             }
