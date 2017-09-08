@@ -56,6 +56,9 @@ var about = function(msg){
         [
             [
                 bot.inlineButton(`GitHub repository`, { url: 'https://github.com/marcocelani/FlickrExplored_bot'})
+            ],
+            [
+                bot.inlineButton(`Do you like this bot? Please rate.`, { url: 'https://storebot.me/bot/flickrexplored_bot' })
             ]
         ]
     );
@@ -67,7 +70,9 @@ var usage = function() {
 Type /setup for setting some options.
 Type /help for showing help.
 Type /about for showing info.
-Type /stop for stopping.`; 
+Type /stop for stopping.
+Search photos with inline query.
+Send your location and get top five photos near you. `;
 };
 
 var insertNewDoc = function(db, coll, msg, updateGetCount) {
@@ -138,9 +143,15 @@ var getWelcome = function(msg) {
             }
         ],
         function(err, result){
-            msg.reply.text(`Welcome ${(msg.from.username) ? msg.from.username : ''}!
-My mission is to show you Flickr's Explored photos in a randomic way.
-${usage()}`);
+            sendMessage(msg, `Welcome ${(msg.from.username) ? msg.from.username : ''}!
+            With @FlickrExplored_bot you can:
+            1- show random Flickr's Explore images;
+            2- schedule the bot for getting photo every day automatically;
+            3- search photos with inline query;
+            4- send your location and get top five photos near you. 
+            ${usage()}
+            If you like @FlickrExplored_bot please rate it: http://storebot.me/bot/flickrexplored_bot  
+            `);
         }
     );
 };
