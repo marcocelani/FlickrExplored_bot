@@ -603,18 +603,17 @@ var setup = function(msg) {
 };
 
 var removeFirstItem = function() {
-    if(imgsObj.lastUpdate){
-        if(imgsObj.lastUpdate.format('YYYY/DD/MM') !== moment().format('YYYY/DD/MM')) {
-            if(imgsObj.scrapeInProgress){
-                logInfo(`Scrape in progress.`);
-                return;
-            }
-            logInfo('Removing first element.');
-            if(imgsObj.imgs.length > 0){
-                imgsObj.imgs.pop();
-            } else {
-                logErr('imgs is empty.');
-            }       
+    if(imgsObj.lastUpdate 
+        && imgsObj.lastUpdate.format('YYYY/DD/MM') !== moment().format('YYYY/DD/MM')){
+        if(imgsObj.scrapeInProgress){
+            logInfo(`Scrape in progress.`);
+            return;
+        }
+        logInfo('removing first element...');
+        if(imgsObj.imgs.length > 0){
+            imgsObj.imgs.shift();
+        } else {
+            logErr('imgs is empty.');
         }
     }
 };
@@ -1155,7 +1154,7 @@ var init = function(){
     setBotListeners();
     scrapeImg();
     restoreUsersSetting();
-
+    intervalledTask();
     bot.start();
 };
 
