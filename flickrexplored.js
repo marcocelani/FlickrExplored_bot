@@ -58,7 +58,7 @@ var about = function(msg){
                 bot.inlineButton(`GitHub repository`, { url: 'https://github.com/marcocelani/FlickrExplored_bot'})
             ],
             [
-                bot.inlineButton(`Do you like this bot? Please rate.`, { url: 'https://storebot.me/bot/flickrexplored_bot' })
+                bot.inlineButton(`Do you like this bot? Please rate.`, { url: config.RATE_URL })
             ]
         ]
     );
@@ -126,6 +126,15 @@ var updateGetCount = function(db, coll, doc){
     );
 };
 
+var welcomeText = function(msg){
+    return `Welcome ${(msg.from.username) ? msg.from.username : ''}!
+With @FlickrExplored_bot you can:
+1- show random Flickr's Explore images;
+2- schedule the bot for getting photo every day automatically;
+3- search photos with inline query;
+4- send your location and get top five photos near you.`
+};
+
 var getWelcome = function(msg) {
     async.waterfall(
         [
@@ -143,15 +152,15 @@ var getWelcome = function(msg) {
             }
         ],
         function(err, result){
-            sendMessage(msg, `Welcome ${(msg.from.username) ? msg.from.username : ''}!
-            With @FlickrExplored_bot you can:
-            1- show random Flickr's Explore images;
-            2- schedule the bot for getting photo every day automatically;
-            3- search photos with inline query;
-            4- send your location and get top five photos near you. 
-            ${usage()}
-            If you like @FlickrExplored_bot please rate it: http://storebot.me/bot/flickrexplored_bot  
-            `);
+            let replyMarkup = bot.inlineKeyboard(
+                [
+                    [
+                        bot.inlineButton(`Do you like this bot? Please rate.`, { url: config.RATE_URL })
+                    ]
+                ]
+            );
+            sendMessage(msg,
+                `${welcomeText(msg)}${usage()}`, { replyMarkup });
         }
     );
 };
@@ -920,6 +929,10 @@ var searchPhoto = function(msg, rpObj, answers){
         
         if(!photosArr)
             return;
+
+        if(photosArr.length == 0){
+            sendMessage(msg, `Sorry, no photos found.`);
+        }
 
         async.each(photosArr,
             (photo, cb) => {
