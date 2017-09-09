@@ -346,7 +346,7 @@ var scrapeImg = function() {
                     cb(null);
                 })
                 .catch( err => {
-                    logErr(`Error in getPhotoIdsEngine:${err.message} -> ${err.StatusCodeError}`);
+                    logErr(`Error in getPhotoIdsEngine:${err.name} -> ${err.statusCode}`);
                     cb(null);
                 });
             }, 
@@ -1014,7 +1014,7 @@ var flickrSearch = function(msg) {
                     ],
                     (err, result) => { 
                         if(result.stat === 'fail'){
-                            console.log(result);
+                            console.log('error in flickrSearch[async.each]:', result);
                             cb(null);
                             return;
                         }
