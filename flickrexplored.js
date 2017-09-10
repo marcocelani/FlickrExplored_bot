@@ -87,7 +87,7 @@ var insertNewDoc = function(db, coll, msg, updateGetCount) {
             return;
         }
         if(r.insertedCount === 1){
-            logInfo(`New user @${toBeInsertedObj.username} added.`);
+            logInfo(`New user @${(toBeInsertedObj.username) ? toBeInsertedObj.username : msg.from.id } added.`);
             db.close();
         } else {
             logErr(`No record inserted.`);
