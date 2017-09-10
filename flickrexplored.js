@@ -104,7 +104,7 @@ var updateUserStatus = function(db, coll, doc){
             if(err){
                 logErr(err.message);
             } else {
-                logInfo(`User @${doc.username}: /start command updated.`);
+                logInfo(`User @${(doc.username) ? doc.username : doc.id}: /start command updated.`);
             }
             db.close();
         }
@@ -119,7 +119,7 @@ var updateGetCount = function(db, coll, doc){
             if(err){
                 logErr(`Error in updateGetCount:${err.message}`);
             } else {
-                logInfo(`User @${doc.username}: getCount field updated`);
+                logInfo(`User @${(doc.username) ? doc.username : doc.id}: getCount field updated`);
             }
             db.close();
         }
@@ -173,7 +173,7 @@ var stopBot = function(db, coll, doc){
             if(err){
                 logErr(`Error in stopBot:${err.message}`);
             } else {
-                logInfo(`User @${doc.username}: /stop command updated`);
+                logInfo(`User @${(doc.username) ? doc.username : doc.id}: /stop command updated`);
             }
             
             db.close();
@@ -204,7 +204,7 @@ var getStop = function(msg){
             if(result === true){
                 resetTime(msg);
                 usersSettings[msg.from.id] = null;
-                msg.reply.text(`Bye bye ${msg.from.username}`);
+                msg.reply.text(`Bye bye ${(msg.from.username) ? msg.from.username : msg.from.id}`);
             }
             else {
                 msg.reply.text(`You never starts bot.`);
