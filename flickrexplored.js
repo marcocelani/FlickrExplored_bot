@@ -612,15 +612,14 @@ var setup = function(msg) {
 };
 
 var removeFirstItem = function() {
-    if(imgsObj.lastUpdate 
-        && imgsObj.lastUpdate.format('YYYY/DD/MM') !== moment().format('YYYY/DD/MM')){
+    if(imgsObj.lastUpdate){
         if(imgsObj.scrapeInProgress){
             logInfo(`Scrape in progress.`);
             return;
         }
         logInfo('removing first element...');
         if(imgsObj.imgs.length > 0){
-            imgsObj.imgs.shift();
+           imgsObj.imgs.shift();
         } else {
             logErr('imgs is empty.');
         }
