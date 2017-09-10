@@ -288,9 +288,7 @@ var scrapeImg = function() {
         logInfo(`Another scrape is in progress.`);
         return;
     }
-    
-    imgsObj.scrapeInProgress = true;
-    
+        
     let mDate = moment().subtract(1, 'days');
 
     if(imgsObj.lastUpdate){
@@ -308,7 +306,9 @@ var scrapeImg = function() {
         dayBefore = config.DAY_BEFORE;
     }
     if(dayBefore != 0){
-        logInfo(`imgs needs update. dayBefore:${dayBefore}`)
+        logInfo(`imgs needs update. dayBefore:${dayBefore}`);
+        imgsObj.scrapeInProgress = true;
+        
         let mDateStr = mDate.format('YYYY/MM/DD');
 
         let rpOptArr = [];
@@ -382,7 +382,7 @@ var scrapeImg = function() {
                 empty_waiting_room();
             }
         );
-    } 
+    }
 };
 
 var getPhotoUrlFromId = function(img_id) {
