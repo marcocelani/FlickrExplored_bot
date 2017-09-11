@@ -976,6 +976,9 @@ var searchPhoto = function(msg, rpObj, answers){
                 }
             }  
         );
+    })
+    .catch(err => {
+        console.log(`error in searchPhoto:${err.name} -> ${err.statusCode}`)
     });
 };
 
