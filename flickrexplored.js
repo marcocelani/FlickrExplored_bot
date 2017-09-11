@@ -458,6 +458,7 @@ var getPhotoV2 = function(msg, fromSetting){
                 //Go to waiting room.
                 waitingRoom.push(msg);
                 logInfo(`user ${msg.from.id} into waiting room.`);
+                sendMessage(msg, `A scrape job is in progress. When job is done you will receive the photo. Sorry for the inconvenient.`);
                 return;
             }
             if(imgsObj.imgs.length == 0){
