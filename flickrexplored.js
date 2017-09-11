@@ -46,7 +46,7 @@ var waitingRoom = [];
 
 var CB_CHOICE = [ 
                   { type:'sameHour', text:'Every Day [same hour]'}, /* NOT USED */
-                  { type: 'randomHour', text: 'Every Day' },
+                  { type: 'randomHour', text: 'Every Day [random hour]' },
                   { type: 'deleteSetup', text: 'Remove setting.'}
                 ];
 /**************************/
@@ -159,8 +159,7 @@ var getWelcome = function(msg) {
                     ]
                 ]
             );
-            sendMessage(msg,
-                `${welcomeText(msg)}${usage()}`, { replyMarkup });
+            sendMessage(msg, `${welcomeText(msg)}${usage()}`, { replyMarkup });
         }
     );
 };
@@ -519,9 +518,9 @@ You don't have any setting yet. Please make a choice.`
 var getNoDataInlineKeyBoard = function() {
     return bot.inlineKeyboard(
         [
-            // [
-            //     bot.inlineButton(CB_CHOICE[0].text, { callback: CB_CHOICE[0].type }),
-            // ],
+            [
+                bot.inlineButton(CB_CHOICE[0].text, { callback: CB_CHOICE[0].type }),
+            ],
             [
                 bot.inlineButton(CB_CHOICE[1].text, { callback: CB_CHOICE[1].type })
             ],
@@ -533,7 +532,6 @@ var getNoDataInlineKeyBoard = function() {
     );
 };
 
-/* NOT USED */
 var getSameHourInlineKeyBoard = function(){
     return bot.inlineKeyboard(
         [
@@ -550,9 +548,9 @@ var getSameHourInlineKeyBoard = function(){
 var getRandomHourInlineKeyBoard = function() {
     return bot.inlineKeyboard(
         [
-            // [
-            //     bot.inlineButton(CB_CHOICE[0].text, { callback: CB_CHOICE[0].type } )
-            // ],
+            [
+                bot.inlineButton(CB_CHOICE[0].text, { callback: CB_CHOICE[0].type } )
+            ],
             [
                 bot.inlineButton(CB_CHOICE[2].text, { callback: CB_CHOICE[2].type } )
             ]
@@ -560,13 +558,11 @@ var getRandomHourInlineKeyBoard = function() {
     );
 };
 
-/* NOT USED */
-var setupSameHourText = function() {
-    return `You have... same hour...`;
+var setupSameHourText = function(msg) {
+    return setupRandomHourText(msg);
 };
 
 var setupRandomHourText = function(msg) {
-    //console.log(usersSettings[msg.from.id]);
     return `Next photo on:${moment(usersSettings[msg.from.id].nextPhotoTime).format('DD/MM/YYYY HH:mm')}`;
 };
 
@@ -594,16 +590,16 @@ var setup = function(msg) {
         ],
         function(err, result){
             if(err){
-                console.log(err);
+                console.log(err.message);
             }
             if(!usersSettings[msg.from.id]){
                 let replyMarkup = getNoDataInlineKeyBoard();
                 sendMessage(msg, setupText(),  { replyMarkup } );
             }
-            // else if(usersSettings[msg.from.id].type === CB_CHOICE[0].type){ /* same hour */
-            //     let replyMarkup = getSameHourInlineKeyBoard();
-            //     sendMessage(msg, setupSameHourText(), { replyMarkup } );
-            // }
+            else if(usersSettings[msg.from.id].type === CB_CHOICE[0].type){ /* same hour */
+                let replyMarkup = getSameHourInlineKeyBoard();
+                sendMessage(msg, setupSameHourText(msg), { replyMarkup } );
+            }
             else if(usersSettings[msg.from.id].type === CB_CHOICE[1].type){ /* random hour */
                 let replyMarkup = getRandomHourInlineKeyBoard();
                 sendMessage(msg, setupRandomHourText(msg), { replyMarkup } );
@@ -689,7 +685,6 @@ var updateUserDBSetting = function(msg, userObj) {
         function(err, result){
             if(err){
                 logErr(err.message);
-                console.log(err);
             }
         }
     );
@@ -704,7 +699,7 @@ var removeUserDBSetting = function(msg){
         ],
         function(err, result){
             if(err){
-                console.log(err);
+                console.log(err.message);
             }
         }
     );
@@ -723,17 +718,28 @@ var getTotMillis = function(userObj){
     return totMillis;
 };
 
+var getSameTimeHour = function(date){
+    if(!date || !moment(date).isMoment)
+        return moment().add(1, 'day');
+    return date.add(1, 'day');
+};
+
 var getRandomicTimeHour = function(date){
-    if(!date)
+    if(!date || !moment(date).isMoment)
         return moment().add(1, 'day').hours(0).add(getRandomic(24) + 1, 'hours');
     return date.add(1, 'day').hours(0).add(getRandomic(24) + 1, 'hours');
 };
 
-var settingInterval = function(msg, totMillis){
+var settingInterval = function(msg, totMillis, type){
+    if(!type)
+        type = CB_CHOICE[1].type;
     return setTimeout(function(){
         getPhotoV2(msg);
         if(usersSettings[msg.from.id]){
-            setRandomHourSetting(msg, true);
+            if(type === CB_CHOICE[1].type)
+                setRandomHourSetting(msg, true);
+            else 
+                setSameHourSetting(msg, true);
         }
     }, totMillis, msg);
 };
@@ -744,13 +750,17 @@ var resetTime = function(msg){
     }
 };
 
-var setRandomHourSetting = function(msg, hideMessage, restoring, noDBUpdate){
+var setHourSetting = function(msg, hideMessage, restoring, noDBUpdate, type){
     resetTime(msg);
-    let userObj = getUserObj(CB_CHOICE[1].type);
+    
+    if(!type)
+        type = CB_CHOICE[0].type;
+
+    let userObj = getUserObj(type);
     
     let userDate = moment(msg.message.date).toDate();
     if(!restoring)
-        userObj.nextPhotoTime = getRandomicTimeHour(moment()); //userDate.add(1, 'day');//.add(getRandomic(24 - userDate.hours()) + 1, 'hours');
+        userObj.nextPhotoTime = (type === CB_CHOICE[1].type) ? getRandomicTimeHour(moment()) : getSameTimeHour(moment());
     else {
         userObj.nextPhotoTime = moment(userDate);
     }
@@ -761,7 +771,7 @@ var setRandomHourSetting = function(msg, hideMessage, restoring, noDBUpdate){
         updateUserDBSetting(msg, userObj);
 
     usersSettings[msg.from.id] = userObj;    
-    userObj.scheduledTimer = settingInterval(msg, totMillis);
+    userObj.scheduledTimer = settingInterval(msg, totMillis, type);
     
     if(!hideMessage
         && !restoring 
@@ -773,21 +783,14 @@ var setRandomHourSetting = function(msg, hideMessage, restoring, noDBUpdate){
     
     if(hideMessage && restoring)
         logInfo(`user ${msg.from.id} restored.`);
-
 };
 
-/* NOT USED */
-var setSameHourSetting = function(msg) {
-    resetTime(msg);
-    let userObj = getUserObj();
-    let totMillis = getTotMillis(userObj);
+var setRandomHourSetting = function(msg, hideMessage, restoring, noDBUpdate){
+    setHourSetting(msg, hideMessage, restoring, noDBUpdate, CB_CHOICE[1].type);
+};
 
-    userObj.scheduledTimer = settingInterval(msg, totMillis);
-
-    usersSettings[msg.from.id] = userObj;
-    updateUserDBSetting(msg, userObj);
-
-    sendMessage(msg, `Done. Next photo on ${userObj.nextPhotoTime.format('DD/MM/YYYY HH:mm')}`);
+var setSameHourSetting = function(msg, hideMessage, restoring, noDBUpdate) {
+    setHourSetting(msg, hideMessage, restoring, noDBUpdate, CB_CHOICE[0].type);
 };
 
 var resetSettting = function(msg, userObj){
@@ -817,7 +820,7 @@ var restoreUsersSetting = function() {
         ],
         (err, result) => {
             if(err){
-                console.log(err);
+                console.log(err.message);
                 return;
             }
 
@@ -839,12 +842,20 @@ var restoreUsersSetting = function() {
                         && moment(result[i].userSetup.nextPhotoTime).isAfter(moment()))
                     {
                         logInfo(`restoring user:${result[i].id}`);
-                        setRandomHourSetting(msg, true, true, true);
+                        if(result[i].userSetup.type === CB_CHOICE[0].type){
+                            setSameHourSetting(msg, true, true, true);
+                        } else {
+                            setRandomHourSetting(msg, true, true, true);
+                        }
                     } else {
                         logInfo(`restoring user and sending photo:${result[i].id}`);
                         msg.message.date = moment();
                         getPhotoV2(msg);                        
-                        setRandomHourSetting(msg, true);
+                        if(result[i].userSetup.type === CB_CHOICE[0].type){
+                            setSameHourSetting(msg, true);
+                        } else {
+                            setRandomHourSetting(msg, true);
+                        }
                     }
                 }
 
@@ -1052,7 +1063,7 @@ var flickrSearch = function(msg) {
 var setBotListeners = function() {
     bot.on('callbackQuery', msg => {
         if(msg.data === CB_CHOICE[0].type){ /* same hour */
-            //setSameHourSetting(msg); /* not used */
+            setSameHourSetting(msg); 
         } else if(msg.data === CB_CHOICE[1].type){ /* random hour */
             setRandomHourSetting(msg);
         } else if(msg.data === CB_CHOICE[2].type){ /* reset */
