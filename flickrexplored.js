@@ -288,15 +288,6 @@ var scrapeImg = function() {
         return;
     }
         
-    let mDate = moment().subtract(1, 'days');
-
-    if(imgsObj.lastUpdate){
-        if(mDate.format('YYYY/DD/MM') === imgsObj.lastUpdate.format('YYYY/DD/MM')) {
-            logInfo(`Skipping same day update.`);
-            return;
-        }
-    }
-
     let flickrUrlsArr = [];
     let dayBefore = config.DAY_BEFORE - imgsObj.imgs.length;
     if(dayBefore < 0){
@@ -307,7 +298,8 @@ var scrapeImg = function() {
     if(dayBefore != 0){
         logInfo(`imgs needs update. dayBefore:${dayBefore}`);
         imgsObj.scrapeInProgress = true;
-        
+
+        let mDate = moment().subtract(1, 'days');
         let mDateStr = mDate.format('YYYY/MM/DD');
 
         let rpOptArr = [];
