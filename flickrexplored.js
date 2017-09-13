@@ -1150,9 +1150,13 @@ var sendMessage = function(msg, text, obj){
     } 
 
     if(obj)
-        return bot.sendMessage(id, text, obj);
+        bot.sendMessage(id, text, obj)
+        .then( result => {})
+        .catch( err => { console.log('error in sendMessage:', err)});
     else 
-        return bot.sendMessage(id, text);
+        bot.sendMessage(id, text)
+        .then( result => {})
+        .catch( err => { console.log('error in sendMessage:', err)});
 };
 
 const bot = getBot();
