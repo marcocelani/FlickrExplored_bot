@@ -29,12 +29,16 @@ const flickrObj = {
     FLICKR_EXPLORE_URL: 'https://www.flickr.com/explore/'
 };
 
-/** Core Data Structure **/
+/** Core Data Structure [for imgs]**/
 var imgsObj = {
     lastUpdate : null,
     imgs: [],
     scrapeInProgress: false
 };
+/*************************/
+/* Users sart settings DS*/
+/*************************/
+var usersStarted = {};
 /*************************/
 /* Users settings DS     */
 /*************************/
@@ -62,7 +66,7 @@ var about = function(msg){
             ]
         ]
     );
-    return sendMessage(msg, `${config.APP_NAME} made by @${config.TELEGRAM_USERNAME}.`, { replyMarkup }); 
+    return sendMessage(msg, `${config.APP_NAME} made by @${config.TELEGRAM_USERNAME}.`, { replyMarkup: replyMarkup }); 
 };
 
 var usage = function() {
@@ -87,7 +91,7 @@ var insertNewDoc = function(db, coll, msg, updateGetCount) {
             return;
         }
         if(r.insertedCount === 1){
-            logInfo(`New user @${(toBeInsertedObj.username) ? toBeInsertedObj.username : msg.from.id } added.`);
+            logInfo(`New user ${getUserName(msg)} added.`);
             db.close();
         } else {
             logErr(`No record inserted.`);
@@ -104,7 +108,7 @@ var updateUserStatus = function(db, coll, doc){
             if(err){
                 logErr(err.message);
             } else {
-                logInfo(`User @${(doc.username) ? doc.username : doc.id}: /start command updated.`);
+                logInfo(`User ${getUserName(msg)}: /start command updated.`);
             }
             db.close();
         }
@@ -119,7 +123,7 @@ var updateGetCount = function(db, coll, doc){
             if(err){
                 logErr(`Error in updateGetCount:${err.message}`);
             } else {
-                logInfo(`User @${(doc.username) ? doc.username : doc.id}: getCount field updated`);
+                logInfo(`User ${getUserName({ from: doc.username, id: doc.id })}: getCount field updated`);
             }
             db.close();
         }
@@ -127,7 +131,7 @@ var updateGetCount = function(db, coll, doc){
 };
 
 var welcomeText = function(msg){
-    return `Welcome ${(msg.from.username) ? msg.from.username : ''}!
+    return `Welcome ${getUserName(msg)}!
 With @FlickrExplored_bot you can:
 1- show random Flickr's Explore images;
 2- schedule the bot for getting photo every day automatically;
@@ -135,7 +139,35 @@ With @FlickrExplored_bot you can:
 4- send your location and get top five photos near you.`
 };
 
+var startUser = function(msg){
+    if(!msg || usersStarted[msg.from.id])
+        return false;
+    usersStarted[msg.from.id] = moment();    
+    return true;
+};
+
+var stopUser = function(msg){
+    if(!msg || !usersStarted[msg.from.id])
+        return false;
+    usersStarted[msg.from.id] = null;
+    return true;
+}
+
+var getRateMarkUp = function(){
+    return bot.inlineKeyboard(
+        [
+            [
+                bot.inlineButton('Do you like this bot?', { url: config.RATE_URL })
+            ]
+        ]
+    );
+};
+
 var getWelcome = function(msg) {
+    if(usersStarted[msg.from.id]){
+        getPhotoV2(msg);
+        return;
+    }
     async.waterfall(
         [
             getDB(),
@@ -152,14 +184,8 @@ var getWelcome = function(msg) {
             }
         ],
         function(err, result){
-            let replyMarkup = bot.inlineKeyboard(
-                [
-                    [
-                        bot.inlineButton(`Do you like this bot? Please rate.`, { url: config.RATE_URL })
-                    ]
-                ]
-            );
-            sendMessage(msg, `${welcomeText(msg)}${usage()}`, { replyMarkup });
+            startUser(msg);
+            sendMessage(msg, `${welcomeText(msg)}${usage()}`, { replyMarkup: getRateMarkUp() });
         }
     );
 };
@@ -172,7 +198,7 @@ var stopBot = function(db, coll, doc){
             if(err){
                 logErr(`Error in stopBot:${err.message}`);
             } else {
-                logInfo(`User @${(doc.username) ? doc.username : doc.id}: /stop command updated`);
+                logInfo(`User ${getUserName({ from: doc.username, id: doc.id })}: /stop command updated`);
             }
             
             db.close();
@@ -196,18 +222,16 @@ var getStop = function(msg){
                     cb(null, true);
                     return;
                 }
-                cb(null, false);
+                cb(null, true);
             }
         ],
         (err, result) => {
-            if(result === true){
-                resetTime(msg);
-                usersSettings[msg.from.id] = null;
-                msg.reply.text(`Bye bye ${(msg.from.username) ? msg.from.username : msg.from.id}`);
-            }
-            else {
+            resetTime(msg);
+            usersSettings[msg.from.id] = null;
+            if(stopUser(msg))
+                msg.reply.text(`Bye bye ${getUserName(msg)}`);
+            else 
                 msg.reply.text(`You never starts bot.`);
-            }
         }
     );
 };
@@ -494,6 +518,10 @@ var getPhotoV2 = function(msg, fromSetting){
 
                     sendMessage(msg, result.url);
 
+                    if(startUser(msg)){
+                        sendMessage(msg, `${welcomeText(msg)}${usage()}`);
+                    }
+
                     if(fromSetting)
                         sendMessage(msg, `Done. Next photo on ${usersSettings[msg.from.id].nextPhotoTime.format('DD/MM/YYYY HH:mm')} UTC.`);
                 }
@@ -586,15 +614,15 @@ var setup = function(msg) {
             }
             if(!usersSettings[msg.from.id]){
                 let replyMarkup = getNoDataInlineKeyBoard();
-                sendMessage(msg, setupText(),  { replyMarkup } );
+                sendMessage(msg, setupText(),  { replyMarkup: replyMarkup } );
             }
             else if(usersSettings[msg.from.id].type === CB_CHOICE[0].type){ /* same hour */
                 let replyMarkup = getSameHourInlineKeyBoard();
-                sendMessage(msg, setupSameHourText(msg), { replyMarkup } );
+                sendMessage(msg, setupSameHourText(msg), { replyMarkup: replyMarkup } );
             }
             else if(usersSettings[msg.from.id].type === CB_CHOICE[1].type){ /* random hour */
                 let replyMarkup = getRandomHourInlineKeyBoard();
-                sendMessage(msg, setupRandomHourText(msg), { replyMarkup } );
+                sendMessage(msg, setupRandomHourText(msg), { replyMarkup: replyMarkup } );
             }
         }
     );
@@ -785,11 +813,12 @@ var setSameHourSetting = function(msg, hideMessage, restoring, noDBUpdate) {
     setHourSetting(msg, hideMessage, restoring, noDBUpdate, CB_CHOICE[0].type);
 };
 
-var resetSettting = function(msg, userObj){
+var resetSetting = function(msg, msgSend){
     resetTime(msg);
     removeUserDBSetting(msg);
     usersSettings[msg.from.id] = null;
-    sendMessage(msg, `Setting removed.`);
+    if(msgSend)
+        sendMessage(msg, `Setting removed.`);
 };
 
 var restoreUsersSetting = function() {
@@ -1059,7 +1088,7 @@ var setBotListeners = function() {
         } else if(msg.data === CB_CHOICE[1].type){ /* random hour */
             setRandomHourSetting(msg);
         } else if(msg.data === CB_CHOICE[2].type){ /* reset */
-            resetSettting(msg);
+            resetSetting(msg, true);
         } else {
             sendMessage(msg.from.id, `Wrong choice: ${ msg.data }`);
         }
@@ -1137,6 +1166,22 @@ var isFromGroup = function(msg){
 
 };
 
+var getUserName = function(msg){
+    if(!msg && !msg.from)
+        return '(not found)';
+    return (msg.from.username) ? `@${msg.from.username}` : `@id:${msg.from.id}`; 
+};
+
+var manageSendError = function(err, msg){
+    if(err && err.error_code && err.error_code == 403){
+        logInfo(`${getUserName(msg)} has stopped and blocked the bot.`);
+        resetSetting(msg, false);
+        stopUser(msg);
+    } else {
+        console.log('Error in sendMessage:', err);
+    }
+};
+
 var sendMessage = function(msg, text, obj){
     let id = -1;
     if(!msg && !msg.chat && !msg.chat.type)
@@ -1151,12 +1196,10 @@ var sendMessage = function(msg, text, obj){
 
     if(obj)
         bot.sendMessage(id, text, obj)
-        .then( result => {})
-        .catch( err => { console.log('error in sendMessage:', err)});
+        .catch( err => { manageSendError(err, msg); });
     else 
         bot.sendMessage(id, text)
-        .then( result => {})
-        .catch( err => { console.log('error in sendMessage:', err)});
+        .catch( err => { manageSendError(err, msg); });
 };
 
 const bot = getBot();
