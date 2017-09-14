@@ -36,10 +36,6 @@ var imgsObj = {
     scrapeInProgress: false
 };
 /*************************/
-/* Users sart settings DS*/
-/*************************/
-var usersStarted = {};
-/*************************/
 /* Users settings DS     */
 /*************************/
 var usersSettings = {};
@@ -108,7 +104,7 @@ var updateUserStatus = function(db, coll, doc){
             if(err){
                 logErr(err.message);
             } else {
-                logInfo(`User ${getUserName(msg)}: /start command updated.`);
+                logInfo(`User ${getUserName({ from: { username: doc.username, id: doc.id } })}: /start command updated.`);
             }
             db.close();
         }
@@ -123,7 +119,7 @@ var updateGetCount = function(db, coll, doc){
             if(err){
                 logErr(`Error in updateGetCount:${err.message}`);
             } else {
-                logInfo(`User ${getUserName({ from: doc.username, id: doc.id })}: getCount field updated`);
+                logInfo(`User ${getUserName({ from: { username: doc.username, id: doc.id } })}: getCount field updated`);
             }
             db.close();
         }
@@ -139,20 +135,6 @@ With @FlickrExplored_bot you can:
 4- send your location and get top five photos near you.`
 };
 
-var startUser = function(msg){
-    if(!msg || usersStarted[msg.from.id])
-        return false;
-    usersStarted[msg.from.id] = moment();    
-    return true;
-};
-
-var stopUser = function(msg){
-    if(!msg || !usersStarted[msg.from.id])
-        return false;
-    usersStarted[msg.from.id] = null;
-    return true;
-}
-
 var getRateMarkUp = function(){
     return bot.inlineKeyboard(
         [
@@ -164,10 +146,6 @@ var getRateMarkUp = function(){
 };
 
 var getWelcome = function(msg) {
-    if(usersStarted[msg.from.id]){
-        getPhotoV2(msg);
-        return;
-    }
     async.waterfall(
         [
             getDB(),
@@ -184,8 +162,10 @@ var getWelcome = function(msg) {
             }
         ],
         function(err, result){
-            startUser(msg);
-            sendMessage(msg, `${welcomeText(msg)}${usage()}`, { replyMarkup: getRateMarkUp() });
+            getPhotoV2(msg);
+            setTimeout( () => { 
+                sendMessage(msg, `${welcomeText(msg)}${usage()}`, { replyMarkup: getRateMarkUp() }) 
+            }, 1000)
         }
     );
 };
@@ -198,7 +178,7 @@ var stopBot = function(db, coll, doc){
             if(err){
                 logErr(`Error in stopBot:${err.message}`);
             } else {
-                logInfo(`User ${getUserName({ from: doc.username, id: doc.id })}: /stop command updated`);
+                logInfo(`User ${getUserName({ from: { username: doc.username, id: doc.id } })}: /stop command updated`);
             }
             
             db.close();
@@ -228,10 +208,7 @@ var getStop = function(msg){
         (err, result) => {
             resetTime(msg);
             usersSettings[msg.from.id] = null;
-            if(stopUser(msg))
-                msg.reply.text(`Bye bye ${getUserName(msg)}`);
-            else 
-                msg.reply.text(`You never starts bot.`);
+            msg.reply.text(`Bye bye ${getUserName(msg)}`);
         }
     );
 };
@@ -518,10 +495,6 @@ var getPhotoV2 = function(msg, fromSetting){
 
                     sendMessage(msg, result.url);
 
-                    if(startUser(msg)){
-                        sendMessage(msg, `${welcomeText(msg)}${usage()}`);
-                    }
-
                     if(fromSetting)
                         sendMessage(msg, `Done. Next photo on ${usersSettings[msg.from.id].nextPhotoTime.format('DD/MM/YYYY HH:mm')} UTC.`);
                 }
@@ -653,12 +626,6 @@ var getBot = function(){
     let botOpt = {
         token: config.BOT_TOKEN,
         usePlugins: [],
-        // pluginConfig: {
-        //     floodProtection: {
-        //         interval: 5,
-        //         message: 'Too many messages, relax!'
-        //     }
-        // }
     };
     if(config.ENABLE_WEBHOOK
         && config.ENABLE_WEBHOOK === true)
@@ -1176,7 +1143,6 @@ var manageSendError = function(err, msg){
     if(err && err.error_code && err.error_code == 403){
         logInfo(`${getUserName(msg)} has stopped and blocked the bot.`);
         resetSetting(msg, false);
-        stopUser(msg);
     } else {
         console.log('Error in sendMessage:', err);
     }
