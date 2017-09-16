@@ -162,7 +162,7 @@ var getWelcome = function(msg) {
             }
         ],
         function(err, result){
-            getPhotoV2(msg);
+            getPhotoV2(msg, false, true);
             setTimeout( () => { 
                 sendMessage(msg, `${welcomeText(msg)}${usage()}`, { replyMarkup: getRateMarkUp() }) 
             }, 1000)
@@ -425,13 +425,18 @@ var getPhotoUrlFromId = function(img_id) {
     }
 };
 
-var getPhotoV2 = function(msg, fromSetting){
+var getPhotoV2 = function(msg, fromSetting, isNewUser){
     async.waterfall(
         [
             getDB(),
             getCollection(),
             findOne(msg),
             (db, coll, doc, cb) => {
+                if(isNewUser){
+                    //skipping;
+                    cb(null, null);
+                    return;
+                }
                 if(!doc){
                     insertNewDoc(db, coll, msg, (imgsObj.scrapeInProgress === true) ? false : true);
                     cb(null, null);
