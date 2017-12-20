@@ -12,6 +12,9 @@
   },
   "keywords": [
     "nodejs",
+    "mongodb",
+    "mongoose",
+    "telebot",
     "telegram",
     "bot"
   ],
@@ -26,8 +29,18 @@
     "htmlparser2": "^3.9.2",
     "moment": "^2.18.1",
     "mongodb": "^2.2.30",
+    "mongoose": "^4.13.7",
     "request": "^2.81.0",
     "request-promise": "^4.2.1",
-    "telebot": "^1.2.2"
+    "telebot": "^1.2.3"
+  },
+  "devDependencies": {
+    "@types/async": "^2.0.45",
+    "@types/htmlparser2": "^3.7.31",
+    "@types/mongodb": "^2.2.17",
+    "@types/mongoose": "^4.7.29",
+    "@types/request-promise": "^4.1.39",
+    "@types/telebot": "^1.2.1",
+    "typescript": "^2.6.2"
   }
 }
