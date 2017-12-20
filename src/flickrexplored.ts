@@ -12,7 +12,13 @@ class FlickrExpored {
     private bot: telebot;
     /** Core Data Structure [for imgs]**/
     private imgsObj: IImgsCore;
-
+    /*************************/
+    /* Users settings DS     */
+    /*************************/
+    private usersSettings: any = {};
+    /*************************/
+    /* Users that are waiting for photo.
+    /*************************/
     constructor() {
         this.bot = new telebot(Config.TELEBOT_OPT);
     }
@@ -32,8 +38,8 @@ class FlickrExpored {
     4- send your location and get top five photos near you.`
     }
 
-    private getRateMarkUp() : any{
-        return this. bot.inlineKeyboard(
+    private getRateMarkUp(): any {
+        return this.bot.inlineKeyboard(
             [
                 [
                     this.bot.inlineButton('Do you like this bot?', { url: Config.RATE_URL })
@@ -64,8 +70,79 @@ class FlickrExpored {
         });
     }
 
-    private sendMessage(msg: any, text: string, obj?: any): any {
+    private isFromGroup(msg: any): boolean {
+        if (msg
+            && msg.chat
+            && msg.chat.type
+            && (msg.chat.type === 'group'
+                || msg.chat.type === 'supergroup'
+                || msg.chat.type === 'channel')
+        ) return true;
+        return false;
+    }
 
+    private logInfo(mex: string): void {
+        this.log('INFO', mex);
+    }
+
+    private logErr(mex: string | Error) {
+        this.log('ERR', mex);
+    };
+
+    private log(type: string, mex: string | Error) {
+        if (!type)
+            type = 'INFO';
+        if (mex instanceof Error)
+            console.log(`[${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex.message}`);
+        else
+            console.log(`[${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex}`);
+    }
+
+    private resetTime(msg: any): void {
+        if(this.usersSettings[msg.from.id] 
+            && this.usersSettings[msg.from.id].scheduledTimer){
+            clearTimeout(this.usersSettings[msg.from.id].scheduledTimer);
+        }
+    }
+
+    private removeUserDBSetting(msg: any): void {
+
+    }
+
+    private resetSetting(msg: any, msgSend: boolean): void {
+        this.resetTime(msg);
+        this.removeUserDBSetting(msg);
+        this.usersSettings[msg.from.id] = null;
+        if (msgSend)
+            this.sendMessage(msg, `Setting removed.`);
+    }
+
+    private manageSendError(err: any, msg: any) {
+        if (err && err.error_code && err.error_code == 403) {
+            this.logInfo(`${this.getUserName(msg)} has stopped and blocked the bot.`);
+            this.resetSetting(msg, false);
+        } else {
+            console.log('Error in sendMessage:', err);
+        }
+    }
+
+    private sendMessage(msg: any, text: string, obj?: any): any {
+        let id = -1;
+        if (!msg && !msg.chat && !msg.chat.type)
+            return;
+        if (this.isFromGroup(msg)) {
+            id = msg.chat.id;
+        }
+        else {
+            id = msg.from.id;
+        }
+
+        if (obj)
+            this.bot.sendMessage(id, text, obj)
+                .catch(err => { this.manageSendError(err, msg); });
+        else
+            this.bot.sendMessage(id, text)
+                .catch(err => { this.manageSendError(err, msg); });
     }
 
     private usage(): string {
