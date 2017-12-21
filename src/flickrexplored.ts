@@ -7,23 +7,58 @@ import * as mongoose from 'mongoose';
 import { Config } from './config';
 import { FlickrConfig } from './flickrconfig';
 import { IImgsCore } from './iimgscore'
+import { IUserModel, UserModel } from './model/userModel';
+import { IUserSettings } from './model/userSettings';
+import { Model } from 'mongoose';
+import { Message } from './model/message';
 
 class FlickrExpored {
     private bot: telebot;
+    private userModel: Model<IUserModel>;
     /** Core Data Structure [for imgs]**/
     private imgsObj: IImgsCore;
     /*************************/
     /* Users settings DS     */
     /*************************/
-    private usersSettings: any = {};
+    private usersSettings: IUserSettings = {};
     /*************************/
     /* Users that are waiting for photo.
     /*************************/
+    private waitingRoom: Array<string> = [];
+    private CB_CHOICE: Array<any> = [
+        { type: 'sameHour', text: 'Every Day [same hour]' },
+        { type: 'randomHour', text: 'Every Day [random hour]' },
+        { type: 'deleteSetup', text: 'Remove setting.' }
+    ];
+    /**************************/
     constructor() {
+        process.on('SIGINT', () => {
+            if (Config.USEMONGO) {
+                const self: FlickrExpored = this;
+                mongoose.connection.close(() => {
+                    self.logInfo('Mongoose default connection disconnected through app termination.');
+                    process.exit(0);
+                });
+            }
+        });
+        if (Config.USEMONGO) {
+            (<any>mongoose).Promise = global.Promise;
+            mongoose.connect(Config.MONGO_URI, { useMongoClient: true });
+            mongoose.connection.on('connected', () => {
+                this.logInfo(`Mongoose connection open on:${Config.MONGO_URI}`);
+            });
+            mongoose.connection.on('error', (err) => {
+                this.logErr(err);
+            });
+            mongoose.connection.on('disconnected', () => {
+                this.logInfo('Mongoose disconnected.');
+            });
+        }
         this.bot = new telebot(Config.TELEBOT_OPT);
+        this.userModel = new UserModel().user;
     }
 
-    private getUserName(msg: any): string {
+    private getUserName(msg: Message): string {
         if (!msg && !msg.from)
             return '(not found)';
         return (msg.from.username) ? `@${msg.from.username}` : `@id:${msg.from.id}`;
@@ -48,13 +83,66 @@ class FlickrExpored {
         );
     }
 
-    private getWelcome(msg: any): void {
-        new Promise<void>(
-            (resolve) => {
+    private findUser(msg: Message): Promise<IUserModel> {
+        if (!msg || !Config.USEMONGO)
+            return new Promise<IUserModel>(
+                (reject) => {
+                    reject();
+                });
+        return this.userModel.findOne()
+            .where({ user_id: msg.from.id })
+            .exec();
+    }
 
+    private insertNewDoc(msg: Message): Promise<void> {
+        return new Promise<void>(
+            (resolve, reject) => {
+                const user = new this.userModel();
+                user.first_name = msg.from.first_name;
+                user.is_bot = msg.from.is_bot;
+                user.user_id = msg.from.id;
+                if (msg.from.last_name)
+                    user.last_name = msg.from.last_name;
+                if (msg.from.language_code)
+                    user.language_code = msg.from.language_code;
+                user.getCount = 0;
+                user.save((err, res, affected) => {
+                    if (err) {
+                        this.logErr(err);
+                        reject();
+                        return;
+                    }
+                    this.logInfo(`user[${this.getUserName(msg)}] saved.`);
+                    resolve();
+                });
             }
-        ).then(
-            () => {
+        );
+    }
+
+    private setDBUser(msg: Message): Promise<void> {
+        return new Promise<void>(
+            async (resolve) => {
+                if (!Config.USEMONGO) {
+                    resolve();
+                    return;
+                }
+                try {
+                    const user = await this.findUser(msg);
+                    if (!user)
+                        await this.insertNewDoc(msg);
+                }
+                catch (err) {
+                    this.logErr(err);
+                } finally {
+                    resolve();
+                }
+            }
+        );
+    }
+
+    private getWelcome(msg: Message): void {
+        this.setDBUser(msg)
+            .then(() => {
                 this.getPhotoV2(msg, false, true)
                     .then(() => {
                         this.sendMessage(msg, `${this.welcomeText(msg)}${this.usage()}`, { replyMarkup: this.getRateMarkUp() });
@@ -62,15 +150,15 @@ class FlickrExpored {
             });
     }
 
-    private getPhotoV2(msg: any,
+    private getPhotoV2(msg: Message,
         fromSetting?: boolean,
         isNewUser?: boolean): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-
+            resolve();
         });
     }
 
-    private isFromGroup(msg: any): boolean {
+    private isFromGroup(msg: Message): boolean {
         if (msg
             && msg.chat
             && msg.chat.type
@@ -93,23 +181,25 @@ class FlickrExpored {
         if (!type)
             type = 'INFO';
         if (mex instanceof Error)
-            console.log(`[${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex.message}`);
+            console.error(`[${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex.message}`);
         else
-            console.log(`[${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex}`);
+            (type === 'ERR')
+                ? console.error(`[${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex}`)
+                : console.log(`[${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex}`);
     }
 
-    private resetTime(msg: any): void {
-        if(this.usersSettings[msg.from.id] 
-            && this.usersSettings[msg.from.id].scheduledTimer){
+    private resetTime(msg: Message): void {
+        if (this.usersSettings[msg.from.id]
+            && this.usersSettings[msg.from.id].scheduledTimer) {
             clearTimeout(this.usersSettings[msg.from.id].scheduledTimer);
         }
     }
 
-    private removeUserDBSetting(msg: any): void {
+    private removeUserDBSetting(msg: Message): void {
 
     }
 
-    private resetSetting(msg: any, msgSend: boolean): void {
+    private resetSetting(msg: Message, msgSend: boolean): void {
         this.resetTime(msg);
         this.removeUserDBSetting(msg);
         this.usersSettings[msg.from.id] = null;
@@ -117,7 +207,7 @@ class FlickrExpored {
             this.sendMessage(msg, `Setting removed.`);
     }
 
-    private manageSendError(err: any, msg: any) {
+    private manageSendError(err: any, msg: Message) {
         if (err && err.error_code && err.error_code == 403) {
             this.logInfo(`${this.getUserName(msg)} has stopped and blocked the bot.`);
             this.resetSetting(msg, false);
@@ -126,7 +216,7 @@ class FlickrExpored {
         }
     }
 
-    private sendMessage(msg: any, text: string, obj?: any): any {
+    private sendMessage(msg: Message, text: string, obj?: any): any {
         let id = -1;
         if (!msg && !msg.chat && !msg.chat.type)
             return;
@@ -155,7 +245,7 @@ class FlickrExpored {
         Send your location and get top five photos near you. `;
     }
 
-    private getStats(msg: any): string {
+    private getStats(msg: Message): string {
         return JSON.stringify({
             lastUpdate: this.imgsObj.lastUpdate,
             imgsLength: this.imgsObj.imgs.length,
@@ -163,7 +253,7 @@ class FlickrExpored {
         }, null, 4);
     }
 
-    private about(msg: any): void {
+    private about(msg: Message): void {
         let replyMarkup = this.bot.inlineKeyboard(
             [
                 [
@@ -177,19 +267,19 @@ class FlickrExpored {
         return this.sendMessage(msg, `${Config.APP_NAME} made by @${Config.TELEGRAM_USERNAME}.`, { replyMarkup: replyMarkup });
     }
 
-    private getStop(msg: any): void {
+    private getStop(msg: Message): void {
 
     }
 
-    private setup(msg: any): void {
+    private setup(msg: Message): void {
 
     }
 
-    private flickrSearch(msg: any): void {
+    private flickrSearch(msg: Message): void {
 
     }
 
-    private flickrGeoSearch(msg: any): void {
+    private flickrGeoSearch(msg: Message): void {
 
     }
 
