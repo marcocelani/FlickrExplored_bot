@@ -11,6 +11,7 @@ export interface IUserModel extends Document {
     last_name?: string;
     language_code?: string;
     getCount: number;
+    is_stopped?: boolean,
     scheduledTimer?: NodeJS.Timer;
 }
 export class UserModel {
@@ -37,6 +38,7 @@ export class UserModel {
             last_name: String,
             language_code: String,
             getCount: Number,
+            is_stopped: Boolean
         }, { collection: Config.MONGO_USR_COLL, timestamps:{} });
         /* model */
         this.userModel = mongoose.model<IUserModel>(UserModel.UserName, this.userSchema);

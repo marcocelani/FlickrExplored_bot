@@ -83,17 +83,6 @@ class FlickrExpored {
         );
     }
 
-    private findUser(msg: Message): Promise<IUserModel> {
-        if (!msg || !Config.USEMONGO)
-            return new Promise<IUserModel>(
-                (reject) => {
-                    reject();
-                });
-        return this.userModel.findOne()
-            .where({ user_id: msg.from.id })
-            .exec();
-    }
-
     private insertNewDoc(msg: Message): Promise<void> {
         return new Promise<void>(
             (resolve, reject) => {
@@ -106,6 +95,7 @@ class FlickrExpored {
                 if (msg.from.language_code)
                     user.language_code = msg.from.language_code;
                 user.getCount = 0;
+                user.is_stopped = false;
                 user.save((err, res, affected) => {
                     if (err) {
                         this.logErr(err);
@@ -127,9 +117,23 @@ class FlickrExpored {
                     return;
                 }
                 try {
-                    const user = await this.findUser(msg);
+                    const user = await this.userModel.findOne()
+                        .where({ user_id: msg.from.id })
+                        .exec();
                     if (!user)
                         await this.insertNewDoc(msg);
+                    else
+                        await this.userModel.update(
+                            { user_id: msg.from.id },
+                            { is_stopped: false },
+                            (err, raw) => {
+                                if (err) {
+                                    this.logErr(err);
+                                    return;
+                                }
+                            }
+                        );
+
                 }
                 catch (err) {
                     this.logErr(err);
@@ -268,7 +272,25 @@ class FlickrExpored {
     }
 
     private getStop(msg: Message): void {
-
+        if (this.isFromGroup(msg)) {
+            this.sendMessage(msg, 'Stops command not allowed to group.');
+            return;
+        }
+        if (Config.USEMONGO) {
+            this.userModel.update(
+                { user_id: msg.from.id },
+                { is_stopped: true },
+                (err, raw) => {
+                    if (err) {
+                        this.logErr(err);
+                        return;
+                    }
+                    this.logInfo(`is_stopped flag set to false for ${this.getUserName(msg)}`);
+                });
+        }
+        this.resetTime(msg);
+        this.userModel[msg.from.id] = null;
+        this.sendMessage(msg, `Bye, bye ${this.getUserName(msg)}`);
     }
 
     private setup(msg: Message): void {
