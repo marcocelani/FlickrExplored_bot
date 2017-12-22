@@ -176,8 +176,18 @@ class FlickrExpored {
         isNewUser?: boolean): Promise<void> {
         return new Promise<void>(async (resolve, reject) => {
             if (Config.USEMONGO) {
-
+                this.userModel.update(
+                    { user_id: msg.from.id },
+                    { $inc: { 'getCount': 1 } },
+                    (err, raw) => {
+                        if(err){
+                            this.logErr(err);
+                            return;
+                        }
+                        this.logInfo(`User ${this.getUserName(msg)}: getCount field updated`);
+                    });
             }
+            
             if (this.imgsObj.scrapeInProgress) {
                 //Go to waiting room.
                 this.waitingRoom.push(msg);
