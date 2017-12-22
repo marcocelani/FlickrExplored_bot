@@ -6,12 +6,14 @@ import * as moment from 'moment';
 import * as mongoose from 'mongoose';
 import { Config } from './config';
 import { FlickrConfig } from './flickrconfig';
-import { IImgsCore } from './iimgscore'
+import { IImgsCore, IImg } from './iimgscore'
 import { IUserModel, UserModel } from './model/userModel';
 import { IUserSettings } from './model/userSettings';
 import { Model } from 'mongoose';
 import { Message } from './model/message';
 import { ITask } from './model/itask';
+import { IFlickrPhotoInfo } from './model/iflickrphotoinfo';
+import { UriOptions, CoreOptions } from 'request';
 
 class FlickrExpored {
     private bot: telebot;
@@ -160,12 +162,149 @@ class FlickrExpored {
             });
     }
 
+    /* get randomic number between 0 and max. */
+    private getRandomic(upperBound: number): number {
+        if (upperBound && typeof (upperBound) !== 'number')
+            return 0;
+        const min = 0; //choose your lowerBound if you want.
+        const max = Math.floor(upperBound);
+        return Math.floor(Math.random() * (max - min)) + min;
+    }
+
     private getPhotoV2(msg: Message,
         fromSetting?: boolean,
         isNewUser?: boolean): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
-            resolve();
+        return new Promise<void>(async (resolve, reject) => {
+            if (Config.USEMONGO) {
+
+            }
+            if (this.imgsObj.scrapeInProgress) {
+                //Go to waiting room.
+                this.waitingRoom.push(msg);
+                this.logInfo(`user ${msg.from.id} into waiting room.`);
+                this.sendMessage(msg, `A scrape job is in progress. When job is done you will receive the photo. Sorry for the inconvenient.`);
+                return;
+            }
+            if (this.imgsObj.imgs.length == 0) {
+                this.logErr(`imgs is empty`);
+                this.sendMessage(msg, `Images not available at moment. Please try later.`);
+                return;
+            }
+
+            let imgsIds: IImg;
+            let img_id: string;
+            if (this.imgsObj.imgs.length > 0) {
+                imgsIds = this.imgsObj.imgs[this.getRandomic(this.imgsObj.imgs.length - 1)];
+                if (imgsIds.imgsArr.length > 0) {
+                    img_id = imgsIds.imgsArr[this.getRandomic(imgsIds.imgsArr.length - 1)];
+                }
+                else {
+                    this.logErr(`imgsIds is empty.`);
+                    this.replyError(msg);
+                    return;
+                }
+            }
+            else {
+                this.logErr(`imgs is empty.`);
+                this.replyError(msg);
+                return;
+            }
+
+            try {
+                const photo_url: IFlickrPhotoInfo = await this.getPhotoUrlFromId(img_id);
+                if (photo_url.stat === 'fail') {
+                    this.replyError(msg);
+                    this.logErr(photo_url.message);
+                    reject();
+                    return;
+                }
+
+                this.sendMessage(msg, photo_url.url);
+                if (fromSetting)
+                    this.sendMessage(msg, `Done. Next photo on ${this.usersSettings[msg.from.id].nextPhotoTime.format('DD/MM/YYYY HH:mm')} UTC.`);
+            }
+            catch (err) {
+
+            }
+            finally {
+                resolve();
+            }
         });
+    }
+
+    private getMsgError(response: any): string {
+        if (response) {
+            return `Something goes wrong. Flickr response:${response.message}, code:${response.code}`;
+        }
+        return '';
+    }
+
+    private getPhotoUrlFromId(img_id: string): Promise<IFlickrPhotoInfo> {
+        return new Promise<IFlickrPhotoInfo>(
+            (resolve, reject) => {
+                const rpOpt: UriOptions & CoreOptions = {
+                    uri: FlickrConfig.ENDPOINT,
+                    qs: {
+                        method: FlickrConfig.METHODS[2],
+                        api_key: FlickrConfig.API_KEY,
+                        photo_id: img_id,
+                        format: FlickrConfig.FORMAT,
+                        nojsoncallback: FlickrConfig.NOJSONCB
+                    },
+                    json: true
+                };
+
+                rp(rpOpt)
+                    .then(response => {
+                        if (response.stat === 'fail') {
+                            resolve({ stat: 'fail', message: this.getMsgError(response) });
+                        } else {
+                            if (response.photo
+                                && response.photo.urls
+                                && response.photo.urls.url
+                                && response.photo.urls.url[0]
+                                && response.photo.urls.url[0]._content) {
+                                resolve({
+                                    stat: 'ok',
+                                    url: response.photo.urls.url[0]._content,
+                                    url_physic_z: this.getPhysicUrl(
+                                        response.photo.farm,
+                                        response.photo.server,
+                                        response.photo.id,
+                                        response.photo.secret,
+                                        'z'
+                                    ),
+                                    title: (response.photo.title
+                                        && response.photo.title._content)
+                                        ? response.photo.title._content
+                                        : ''
+                                });
+                            } else {
+                                resolve({ stat: 'fail', message: 'wrong response.' });
+                            }
+                        }
+                    }).catch(err => {
+                        this.logErr(err.message);
+                        reject(err);
+                    });
+            }
+        );
+    }
+
+    private getPhysicUrl(
+        farm_id: string,
+        server_id: string,
+        id: string,
+        secret: string,
+        size: string): string {
+        if (!size)
+            return `https://farm${farm_id}.staticflickr.com/${server_id}/${id}_${secret}.jpg`;
+        else
+            return `https://farm${farm_id}.staticflickr.com/${server_id}/${id}_${secret}_${size}.jpg`;
+    }
+
+    private replyError(msg: Message) {
+        return this.sendMessage(msg, `Something goes wrong.`);
     }
 
     private isFromGroup(msg: Message): boolean {
@@ -226,7 +365,7 @@ class FlickrExpored {
         }
     }
 
-    private sendMessage(msg: Message, text: string, obj?: any): any {
+    private sendMessage(msg: Message, text: string, obj?: any): void {
         let id = -1;
         if (!msg && !msg.chat && !msg.chat.type)
             return;
@@ -346,7 +485,7 @@ class FlickrExpored {
                             return;
                         }
                         const _img = img[img.length - 1];
-                        let img_id = _img.split('_');
+                        const img_id = _img.split('_');
                         if (img_id.length == 0) {
                             this.logErr('img_id has no length.');
                             return;
@@ -431,7 +570,7 @@ class FlickrExpored {
 
                     if (item)
                         this.logInfo('Empty the waiting room.');
-                    const self : FlickrExpored = this;
+                    const self: FlickrExpored = this;
                     function empty_waiting_room() {
                         while (item && count < 10) {
                             ++count;

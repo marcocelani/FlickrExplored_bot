@@ -1,5 +1,5 @@
 import { Moment } from "moment";
-interface IImg {
+export interface IImg {
     date: string;
     imgsArr : Array<any>;
 }

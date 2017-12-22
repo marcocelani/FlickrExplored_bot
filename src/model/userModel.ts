@@ -13,6 +13,7 @@ export interface IUserModel extends Document {
     getCount: number;
     is_stopped?: boolean,
     scheduledTimer?: NodeJS.Timer;
+    nextPhotoTime?: Moment;
 }
 export class UserModel {
     public static readonly UserName: string = 'User';
