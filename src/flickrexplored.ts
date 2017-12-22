@@ -11,6 +11,7 @@ import { IUserModel, UserModel } from './model/userModel';
 import { IUserSettings } from './model/userSettings';
 import { Model } from 'mongoose';
 import { Message } from './model/message';
+import { ITask } from './model/itask';
 
 class FlickrExpored {
     private bot: telebot;
@@ -24,7 +25,7 @@ class FlickrExpored {
     /*************************/
     /* Users that are waiting for photo.
     /*************************/
-    private waitingRoom: Array<string> = [];
+    private waitingRoom: Array<Message> = [];
     private CB_CHOICE: Array<any> = [
         { type: 'sameHour', text: 'Every Day [same hour]' },
         { type: 'randomHour', text: 'Every Day [random hour]' },
@@ -54,6 +55,11 @@ class FlickrExpored {
                 this.logInfo('Mongoose disconnected.');
             });
         }
+        this.imgsObj = {
+            lastUpdate: moment(),
+            scrapeInProgress: false,
+            imgs: []
+        };
         this.bot = new telebot(Config.TELEBOT_OPT);
         this.userModel = new UserModel().user;
     }
@@ -321,16 +327,160 @@ class FlickrExpored {
 
     }
 
-    private scrapeImg() {
+    private scrapeEngine(name: string,
+        attribs: { [type: string]: string },
+        imgsArr: Array<string>): void {
+        if (name === 'div'
+            && attribs.style) {
+            const tokens = attribs.style.split(':');
+            for (let i = 0; i < tokens.length; ++i) {
+                let token = tokens[i].trim();
+                if (token.includes('url')
+                    && token.length > 4) {
+                    const img_url = token.substring(4, token.length - 1);
+                    if (img_url.endsWith('.jpg')
+                        || img_url.endsWith('.JPG')) {
+                        let img: Array<string> = img_url.split('/');
+                        if (img.length == 0) {
+                            this.logErr('img has no length.');
+                            return;
+                        }
+                        const _img = img[img.length - 1];
+                        let img_id = _img.split('_');
+                        if (img_id.length == 0) {
+                            this.logErr('img_id has no length.');
+                            return;
+                        }
+                        imgsArr.push(img_id[0]);
+                    }
+                }
+            }
+        }
+    }
 
+    private scrapeImg() {
+        if (this.imgsObj.scrapeInProgress) {
+            this.logInfo(`Another scrape is in progress.`);
+            return;
+        }
+        const flickrUrlsArr: Array<string> = [];
+        let dayBefore: number = Config.DAY_BEFORE - this.imgsObj.imgs.length;
+        if (dayBefore < 0) {
+            this.logErr(`dayBefore:${dayBefore}. Negative values found. I'm restoring imgs array.`);
+            this.imgsObj.imgs = [];
+            dayBefore = Config.DAY_BEFORE;
+        }
+        if (dayBefore != 0) {
+            this.logInfo(`imgs needs update. dayBefore:${dayBefore}`);
+            this.imgsObj.scrapeInProgress = true;
+
+            const mDate = moment().subtract(1, 'days');
+            let mDateStr = mDate.format('YYYY/MM/DD');
+
+            let rpOptArr: Array<ITask> = [];
+            for (let i = 0; i < dayBefore; ++i) {
+                rpOptArr.push({
+                    task_id: i,
+                    dateStr: mDateStr,
+                    rpOpt: { uri: FlickrConfig.FLICKR_EXPLORE_URL + mDateStr }
+                });
+                mDateStr = mDate.subtract(1, 'days').format('YYYY/MM/DD');
+            }
+
+            this.logInfo('starting parallel tasks...');
+            async.eachLimit(rpOptArr, 2,
+                (rpOptItem, cb) => {
+                    if (!rpOptItem.rpOpt) {
+                        cb(new Error(`Wrong rpOpt.`));
+                        return;
+                    }
+
+                    this.logInfo(`task ${rpOptItem.task_id} started.`)
+                    let imgsArr: Array<string> = [];
+                    const self: FlickrExpored = this;
+                    let parser = new htmlparser.Parser(
+                        {
+                            onopentag: function (name: string, attribs: { [type: string]: string }) {
+                                self.scrapeEngine(name, attribs, imgsArr);
+                            }
+                        });
+
+                    rp(rpOptItem.rpOpt)
+                        .then(response => {
+                            parser.write(response);
+                            parser.end();
+                            this.logInfo(`task ${rpOptItem.task_id} ended.`);
+                            this.imgsObj.imgs.push({ date: rpOptItem.dateStr, imgsArr: imgsArr });
+                            cb(null);
+                        })
+                        .catch(err => {
+                            this.logErr(`Error in getPhotoIdsEngine:${err.name} -> ${err.statusCode}`);
+                            cb(null);
+                        });
+                },
+                (err: Error) => {
+                    if (err) {
+                        this.logErr(`Something goes wrong:${err.message}.`);
+                    }
+                    this.imgsObj.lastUpdate = moment();
+                    this.imgsObj.scrapeInProgress = false;
+                    this.logInfo('Tasks completed.');
+
+                    let count = 0;
+                    let item = this.waitingRoom.pop();
+
+                    if (item)
+                        this.logInfo('Empty the waiting room.');
+                    const self : FlickrExpored = this;
+                    function empty_waiting_room() {
+                        while (item && count < 10) {
+                            ++count;
+                            this.getPhotoV2(item);
+                            item = this.waitingRoom.pop();
+                        }
+
+                        if (item) {
+                            count = 0;
+                            process.nextTick(empty_waiting_room);
+                        } else {
+                            self.logInfo('Waiting room is empty.');
+                        }
+                    }
+
+                    empty_waiting_room();
+                }
+            );
+        }
     }
 
     private restoreUsersSetting() {
 
     }
 
-    private intervalledTask() {
+    private removeFirstItem(): void {
+        if (this.imgsObj.lastUpdate) {
+            if (this.imgsObj.scrapeInProgress) {
+                this.logInfo(`Scrape in progress.`);
+                return;
+            }
+            this.logInfo('removing first element...');
+            if (this.imgsObj.imgs.length > 0) {
+                this.imgsObj.imgs.shift();
+            } else {
+                this.logErr('imgs is empty.');
+            }
+        }
+    }
 
+    private intervalledTask() {
+        setInterval(() => {
+            this.removeFirstItem()
+        },
+            Config.IMGS_ARR_REFRESH
+        );
+        setInterval(() => {
+            this.scrapeImg()
+        }, Config.IMGS_REFRESH_TIME);
     }
 
     init() {

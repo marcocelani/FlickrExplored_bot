@@ -1,5 +1,10 @@
+import { Moment } from "moment";
+interface IImg {
+    date: string;
+    imgsArr : Array<any>;
+}
 export interface IImgsCore {
-    lastUpdate : Date,
-    imgs : Array<string>,
+    lastUpdate : Moment,
+    imgs : Array<IImg>,
     scrapeInProgress : boolean
 }
