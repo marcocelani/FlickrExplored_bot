@@ -16,4 +16,5 @@ export interface Message {
     from? : User;
     date : number;
     chat : Chat;
+    message? : any;
 }

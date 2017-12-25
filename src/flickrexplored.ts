@@ -7,13 +7,15 @@ import * as mongoose from 'mongoose';
 import { Config } from './config';
 import { FlickrConfig } from './flickrconfig';
 import { IImgsCore, IImg } from './iimgscore'
-import { IUserModel, UserModel } from './model/userModel';
-import { IUserSettings } from './model/userSettings';
+import { ICBChoice } from './models/icbchoice'
+import { IUserModel, UserModel, IUserSetup } from './models/userModel';
+import { IUserSettings } from './models/userSettings';
 import { Model } from 'mongoose';
-import { Message } from './model/message';
-import { ITask } from './model/itask';
-import { IFlickrPhotoInfo } from './model/iflickrphotoinfo';
+import { Message } from './models/message';
+import { ITask } from './models/itask';
+import { IFlickrPhotoInfo } from './models/iflickrphotoinfo';
 import { UriOptions, CoreOptions } from 'request';
+import { Moment } from 'moment';
 
 class FlickrExpored {
     private bot: telebot;
@@ -28,7 +30,7 @@ class FlickrExpored {
     /* Users that are waiting for photo.
     /*************************/
     private waitingRoom: Array<Message> = [];
-    private CB_CHOICE: Array<any> = [
+    private CB_CHOICE: Array<ICBChoice> = [
         { type: 'sameHour', text: 'Every Day [same hour]' },
         { type: 'randomHour', text: 'Every Day [random hour]' },
         { type: 'deleteSetup', text: 'Remove setting.' }
@@ -104,6 +106,7 @@ class FlickrExpored {
                     user.language_code = msg.from.language_code;
                 user.getCount = 0;
                 user.is_stopped = false;
+                user.userSetup = null;
                 user.save((err, res, affected) => {
                     if (err) {
                         this.logErr(err);
@@ -180,14 +183,14 @@ class FlickrExpored {
                     { user_id: msg.from.id },
                     { $inc: { 'getCount': 1 } },
                     (err, raw) => {
-                        if(err){
+                        if (err) {
                             this.logErr(err);
                             return;
                         }
                         this.logInfo(`User ${this.getUserName(msg)}: getCount field updated`);
                     });
             }
-            
+
             if (this.imgsObj.scrapeInProgress) {
                 //Go to waiting room.
                 this.waitingRoom.push(msg);
@@ -448,8 +451,85 @@ class FlickrExpored {
         this.sendMessage(msg, `Bye, bye ${this.getUserName(msg)}`);
     }
 
-    private setup(msg: Message): void {
+    private setupText(): string {
+        return `You can setup this bot for getting photo automatically.  
+You don't have any setting yet. Please make a choice.`
+    }
 
+    private getNoDataInlineKeyBoard(): any {
+        return this.bot.inlineKeyboard(
+            [
+                [
+                    this.bot.inlineButton(this.CB_CHOICE[0].text, { callback: this.CB_CHOICE[0].type }),
+                ],
+                [
+                    this.bot.inlineButton(this.CB_CHOICE[1].text, { callback: this.CB_CHOICE[1].type })
+                ],
+                /* TODO */
+                /*[
+                    bot.inlineButton('Every Day [custom hour]', {callback: 'TODO'})
+                ]*/
+            ]
+        );
+    }
+
+    private getSameHourInlineKeyBoard(): any{
+        return this.bot.inlineKeyboard(
+            [
+                [
+                    this.bot.inlineButton(this.CB_CHOICE[1].text, { callback: this.CB_CHOICE[1].type } )
+                ],
+                [
+                    this.bot.inlineButton(this.CB_CHOICE[2].text, { callback: this.CB_CHOICE[2].type })
+                ]
+            ]
+        );
+    }
+    
+    private getRandomHourInlineKeyBoard(): any {
+        return this.bot.inlineKeyboard(
+            [
+                [
+                    this.bot.inlineButton(this.CB_CHOICE[0].text, { callback: this.CB_CHOICE[0].type } )
+                ],
+                [
+                    this.bot.inlineButton(this.CB_CHOICE[2].text, { callback: this.CB_CHOICE[2].type } )
+                ]
+            ]
+        );
+    }
+
+    private setupSameHourText(msg: Message): string {
+        return this.setupRandomHourText(msg);
+    }
+    
+    private setupRandomHourText(msg: Message): string {
+        return `Next photo on:${moment(this.usersSettings[msg.from.id].nextPhotoTime).format('DD/MM/YYYY HH:mm')}`;
+    }
+
+    private setup(msg: Message): void {
+        if (msg.chat.type === 'group'
+            || msg.chat.type === 'supergroup'
+            || msg.chat.type === 'channel') {
+            this.sendMessage(msg, `Setup command not allowed in groups.`); /* TODO? I don't know. */
+            return;
+        }
+        if (Config.USEMONGO) {
+
+        }
+        if (!this.usersSettings[msg.from.id]
+            || !this.usersSettings[msg.from.id].userSetup) {
+            const replyMarkup = this.getNoDataInlineKeyBoard();
+            this.sendMessage(msg, this.setupText(), { replyMarkup: replyMarkup });
+        }
+        else if (this.usersSettings[msg.from.id].userSetup.type === this.CB_CHOICE[0].type) { /* same hour */
+            const replyMarkup = this.getSameHourInlineKeyBoard();
+            this.sendMessage(msg, this.setupSameHourText(msg), { replyMarkup: replyMarkup });
+        }
+        else if (this.usersSettings[msg.from.id].userSetup.type === this.CB_CHOICE[1].type) { /* random hour */
+            let replyMarkup = this.getRandomHourInlineKeyBoard();
+            this.sendMessage(msg, this.setupRandomHourText(msg), { replyMarkup: replyMarkup });
+        }
     }
 
     private flickrSearch(msg: Message): void {
@@ -602,8 +682,165 @@ class FlickrExpored {
         }
     }
 
-    private restoreUsersSetting() {
+    private getUserObj(type: string): IUserSetup {
+        return <IUserSetup>{
+            type: type,
+            nextPhotoTime: moment()
+        }
+    }
 
+    private getTotMillis(userObj: IUserSetup): number {
+        let totMillis = userObj.nextPhotoTime.valueOf() - moment().valueOf();
+        if (totMillis < 0 || isNaN(totMillis) || !isFinite(totMillis))
+            totMillis = 60 * 1000 * 24;
+        return totMillis;
+    }
+
+    private getRandomicTimeHour(date: Moment): Moment {
+        if (!date)
+            return moment().add(1, 'day').hours(0).add(this.getRandomic(24) + 1, 'hours');
+        return date.add(1, 'day').hours(0).add(this.getRandomic(24) + 1, 'hours');
+    }
+
+    private getSameTimeHour(date: Moment): Moment {
+        if (!date)
+            return moment().add(1, 'day');
+        return date.add(1, 'day');
+    }
+
+    private updateUserDBSetting(msg: Message, userObj: IUserSetup): void {
+        if (!Config.USEMONGO)
+            return;
+        this.userModel.findOneAndUpdate(
+            { user_id: msg.from.id },
+            { $set: { userSetup: (userObj) ? { nextPhotoTime: userObj.nextPhotoTime, type: userObj.type } : null } },
+            (err, doc, res) => {
+                if (err) {
+                    this.logErr(err);
+                    return;
+                }
+            }
+        );
+    }
+
+    private settingInterval(msg: Message, totMillis: number, type: string): NodeJS.Timer {
+        if (!type)
+            type = this.CB_CHOICE[1].type;
+        return setTimeout(function () {
+            this.getPhotoV2(msg);
+            if (this.usersSettings[msg.from.id]) {
+                if (type === this.CB_CHOICE[1].type)
+                    this.setRandomHourSetting(msg, true);
+                else
+                    this.setSameHourSetting(msg, true);
+            }
+        }, totMillis, msg);
+    }
+
+    private setHourSetting(msg: Message, type: string, hideMessage?: boolean, restoring?: boolean, noDBUpdate?: boolean) {
+        this.resetTime(msg);
+
+        if (!type)
+            type = this.CB_CHOICE[0].type;
+
+        let userObj = this.getUserObj(type);
+
+        const userDate = moment(msg.message.date).toDate();
+        if (!restoring)
+            userObj.nextPhotoTime = (type === this.CB_CHOICE[1].type)
+                ? this.getRandomicTimeHour(moment())
+                : this.getSameTimeHour(moment());
+        else {
+            userObj.nextPhotoTime = moment(userDate);
+        }
+
+        const totMillis = this.getTotMillis(userObj);
+
+        if (!noDBUpdate)
+            this.updateUserDBSetting(msg, userObj);
+
+        this.usersSettings[msg.from.id].userSetup = userObj;
+        this.usersSettings[msg.from.id].scheduledTimer = this.settingInterval(msg, totMillis, type);
+
+        if (!hideMessage
+            && !restoring
+            && !noDBUpdate) {
+
+            this.getPhotoV2(msg, true);
+        }
+
+        if (hideMessage && restoring)
+            this.logInfo(`user ${msg.from.id} restored.`);
+    }
+
+    private setRandomHourSetting(msg: Message,
+        hideMessage: boolean, restoring?: boolean, noDBUpdate?: boolean) {
+        this.setHourSetting(msg, this.CB_CHOICE[1].type, hideMessage, restoring, noDBUpdate);
+    }
+
+    private setSameHourSetting(msg: Message,
+        hideMessage: boolean, restoring?: boolean, noDBUpdate?: boolean) {
+        this.setHourSetting(msg, this.CB_CHOICE[0].type, hideMessage, restoring, noDBUpdate);
+    }
+
+    private restoreUsersSetting() {
+        if (!Config.USEMONGO)
+            return;
+        this.userModel.find(
+            { 'userSetup': { $ne: null } },
+            (err: any, result: Array<IUserModel>) => {
+                if (err) {
+                    this.logErr(err);
+                    return;
+                }
+
+                /* splitting */
+                let sidx = 0;
+                let size = 10;
+                let i = 0;
+
+                const self: FlickrExpored = this;
+
+                function compute_restoring() {
+                    for (i = sidx; i < (sidx + size) && i < result.length; ++i) {
+                        let msg: Message = {
+                            message_id: 0,
+                            date: 0,
+                            chat: null,
+                            from: { id: result[i].user_id, is_bot: false, first_name: '' },
+                            message: {
+                                date: result[i].userSetup.nextPhotoTime
+                            }
+                        };
+
+                        if (moment.isMoment(result[i].userSetup.nextPhotoTime)
+                            && moment(result[i].userSetup.nextPhotoTime).isAfter(moment())) {
+                            self.logInfo(`restoring user:${result[i].id}`);
+                            if (result[i].userSetup.type === self.CB_CHOICE[0].type) {
+                                self.setSameHourSetting(msg, true, true, true);
+                            } else {
+                                self.setRandomHourSetting(msg, true, true, true);
+                            }
+                        } else {
+                            self.logInfo(`restoring user and sending photo:${result[i].id}`);
+                            msg.message.date = moment();
+                            self.getPhotoV2(msg);
+                            if (result[i].userSetup.type === self.CB_CHOICE[0].type) {
+                                self.setSameHourSetting(msg, true);
+                            } else {
+                                self.setRandomHourSetting(msg, true);
+                            }
+                        }
+                    }
+
+                    if (!(i >= result.length)) {
+                        sidx += size;
+                        process.nextTick(compute_restoring);
+                    }
+                }
+
+                compute_restoring();
+            });
     }
 
     private removeFirstItem(): void {
