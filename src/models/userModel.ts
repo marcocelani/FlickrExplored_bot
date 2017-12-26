@@ -1,12 +1,10 @@
 import { Document, Schema, Model } from "mongoose";
 import * as mongoose from 'mongoose';
-import * as mongose_moment from 'mongoose-moment';
 import { Moment } from "moment";
 import { Config } from "../Config";
-mongose_moment(mongoose);
 export interface IUserSetup extends Document {
     type: string;
-    nextPhotoTime: Moment;
+    nextPhotoTime: Date;
 }
 export interface IUserModel extends Document {
     user_id: number;
@@ -14,10 +12,9 @@ export interface IUserModel extends Document {
     first_name: string;
     last_name?: string;
     language_code?: string;
-    getCount: number;
+    count: number;
     is_stopped?: boolean,
     scheduledTimer?: NodeJS.Timer;
-    nextPhotoTime?: Moment;
     userSetup: IUserSetup;
 }
 export class UserModel {
@@ -34,7 +31,7 @@ export class UserModel {
                 required: true
             },
             nextPhotoTime: {
-                type: 'Moment',
+                type: Date,
                 required: true
             }
         });
@@ -53,7 +50,7 @@ export class UserModel {
             },
             last_name: String,
             language_code: String,
-            getCount: Number,
+            count: Number,
             is_stopped: Boolean,
             userSetup: this.userSetupSchema
         }, { collection: Config.MONGO_USR_COLL, timestamps: {} });

@@ -37,13 +37,15 @@ class FlickrExpored {
     ];
     /**************************/
     constructor() {
+        this.logInfo(`Starting ${Config.APP_NAME}[PID:${process.pid}]`);
         process.on('SIGINT', () => {
             if (Config.USEMONGO) {
-                const self: FlickrExpored = this;
-                mongoose.connection.close(() => {
-                    self.logInfo('Mongoose default connection disconnected through app termination.');
-                    process.exit(0);
-                });
+                this.closeMongoConnection();
+            }
+        });
+        process.on('SIGTERM', () => {
+            if (Config.USEMONGO) {
+                this.closeMongoConnection();
             }
         });
         if (Config.USEMONGO) {
@@ -68,6 +70,14 @@ class FlickrExpored {
         this.userModel = new UserModel().user;
     }
 
+    private closeMongoConnection() {
+        const self: FlickrExpored = this;
+        mongoose.connection.close(() => {
+            self.logInfo('Mongoose default connection disconnected through app termination.');
+            process.exit(0);
+        });
+    }
+
     private getUserName(msg: Message): string {
         if (!msg && !msg.from)
             return '(not found)';
@@ -76,11 +86,11 @@ class FlickrExpored {
 
     private welcomeText(msg) {
         return `Welcome ${this.getUserName(msg)}!
-    With @FlickrExplored_bot you can:
-    1- show random Flickr's Explore images;
-    2- schedule the bot for getting photo every day automatically;
-    3- search photos with inline query;
-    4- send your location and get top five photos near you.`
+With @FlickrExplored_bot you can:
+1- show random Flickr's Explore images;
+2- schedule the bot for getting photo every day automatically;
+3- search photos with inline query;
+4- send your location and get top five photos near you.`
     }
 
     private getRateMarkUp(): any {
@@ -104,7 +114,7 @@ class FlickrExpored {
                     user.last_name = msg.from.last_name;
                 if (msg.from.language_code)
                     user.language_code = msg.from.language_code;
-                user.getCount = 0;
+                user.count = 0;
                 user.is_stopped = false;
                 user.userSetup = null;
                 user.save((err, res, affected) => {
@@ -131,6 +141,7 @@ class FlickrExpored {
                     const user = await this.userModel.findOne()
                         .where({ user_id: msg.from.id })
                         .exec();
+                    const self: FlickrExpored = this;
                     if (!user)
                         await this.insertNewDoc(msg);
                     else
@@ -139,7 +150,7 @@ class FlickrExpored {
                             { is_stopped: false },
                             (err, raw) => {
                                 if (err) {
-                                    this.logErr(err);
+                                    self.logErr(err);
                                     return;
                                 }
                             }
@@ -171,7 +182,10 @@ class FlickrExpored {
             return 0;
         const min = 0; //choose your lowerBound if you want.
         const max = Math.floor(upperBound);
-        return Math.floor(Math.random() * (max - min)) + min;
+        if (min > max)
+            return Math.floor(Math.random() * (min - max)) + max;
+        else
+            return Math.floor(Math.random() * (max - min)) + min;
     }
 
     private getPhotoV2(msg: Message,
@@ -179,15 +193,16 @@ class FlickrExpored {
         isNewUser?: boolean): Promise<void> {
         return new Promise<void>(async (resolve, reject) => {
             if (Config.USEMONGO) {
+                const self: FlickrExpored = this;
                 this.userModel.update(
                     { user_id: msg.from.id },
-                    { $inc: { 'getCount': 1 } },
+                    { $inc: { 'count': 1 } },
                     (err, raw) => {
                         if (err) {
-                            this.logErr(err);
+                            self.logErr(err);
                             return;
                         }
-                        this.logInfo(`User ${this.getUserName(msg)}: getCount field updated`);
+                        this.logInfo(`User ${this.getUserName(msg)}: count field updated`);
                     });
             }
 
@@ -234,10 +249,10 @@ class FlickrExpored {
 
                 this.sendMessage(msg, photo_url.url);
                 if (fromSetting)
-                    this.sendMessage(msg, `Done. Next photo on ${this.usersSettings[msg.from.id].nextPhotoTime.format('DD/MM/YYYY HH:mm')} UTC.`);
+                    this.sendMessage(msg, `Done. Next photo on ${moment(this.usersSettings[msg.from.id].userSetup.nextPhotoTime).format('DD/MM/YYYY HH:mm')} UTC.`);
             }
             catch (err) {
-
+                this.logErr(err);
             }
             finally {
                 resolve();
@@ -358,7 +373,19 @@ class FlickrExpored {
     }
 
     private removeUserDBSetting(msg: Message): void {
-
+        if (!Config.USEMONGO)
+            return;
+        const self: FlickrExpored = this;
+        this.userModel.findOneAndUpdate(
+            { user_id: msg.from.id },
+            { $set: { userSetup: null } },
+            (err, doc, res) => {
+                if (err) {
+                    self.logErr(err);
+                    return;
+                }
+            }
+        )
     }
 
     private resetSetting(msg: Message, msgSend: boolean): void {
@@ -372,6 +399,19 @@ class FlickrExpored {
     private manageSendError(err: any, msg: Message) {
         if (err && err.error_code && err.error_code == 403) {
             this.logInfo(`${this.getUserName(msg)} has stopped and blocked the bot.`);
+            if (Config.USEMONGO) {
+                const self: FlickrExpored = this;
+                this.userModel.findOneAndUpdate(
+                    { user_id: msg.from.id },
+                    { is_stopped: true },
+                    (err, doc, res) => {
+                        if (err) {
+                            self.logErr(err);
+                            return;
+                        }
+                    }
+                );
+            }
             this.resetSetting(msg, false);
         } else {
             console.log('Error in sendMessage:', err);
@@ -435,15 +475,16 @@ class FlickrExpored {
             return;
         }
         if (Config.USEMONGO) {
+            const self: FlickrExpored = this;
             this.userModel.update(
                 { user_id: msg.from.id },
                 { is_stopped: true },
                 (err, raw) => {
                     if (err) {
-                        this.logErr(err);
+                        self.logErr(err);
                         return;
                     }
-                    this.logInfo(`is_stopped flag set to false for ${this.getUserName(msg)}`);
+                    self.logInfo(`is_stopped flag set to false for ${this.getUserName(msg)}`);
                 });
         }
         this.resetTime(msg);
@@ -473,11 +514,11 @@ You don't have any setting yet. Please make a choice.`
         );
     }
 
-    private getSameHourInlineKeyBoard(): any{
+    private getSameHourInlineKeyBoard(): any {
         return this.bot.inlineKeyboard(
             [
                 [
-                    this.bot.inlineButton(this.CB_CHOICE[1].text, { callback: this.CB_CHOICE[1].type } )
+                    this.bot.inlineButton(this.CB_CHOICE[1].text, { callback: this.CB_CHOICE[1].type })
                 ],
                 [
                     this.bot.inlineButton(this.CB_CHOICE[2].text, { callback: this.CB_CHOICE[2].type })
@@ -485,15 +526,15 @@ You don't have any setting yet. Please make a choice.`
             ]
         );
     }
-    
+
     private getRandomHourInlineKeyBoard(): any {
         return this.bot.inlineKeyboard(
             [
                 [
-                    this.bot.inlineButton(this.CB_CHOICE[0].text, { callback: this.CB_CHOICE[0].type } )
+                    this.bot.inlineButton(this.CB_CHOICE[0].text, { callback: this.CB_CHOICE[0].type })
                 ],
                 [
-                    this.bot.inlineButton(this.CB_CHOICE[2].text, { callback: this.CB_CHOICE[2].type } )
+                    this.bot.inlineButton(this.CB_CHOICE[2].text, { callback: this.CB_CHOICE[2].type })
                 ]
             ]
         );
@@ -502,9 +543,9 @@ You don't have any setting yet. Please make a choice.`
     private setupSameHourText(msg: Message): string {
         return this.setupRandomHourText(msg);
     }
-    
+
     private setupRandomHourText(msg: Message): string {
-        return `Next photo on:${moment(this.usersSettings[msg.from.id].nextPhotoTime).format('DD/MM/YYYY HH:mm')}`;
+        return `Next photo on:${moment(this.usersSettings[msg.from.id].userSetup.nextPhotoTime).format('DD/MM/YYYY HH:mm')}`;
     }
 
     private setup(msg: Message): void {
@@ -515,7 +556,19 @@ You don't have any setting yet. Please make a choice.`
             return;
         }
         if (Config.USEMONGO) {
-
+            const self: FlickrExpored = this;
+            this.userModel.findOne({ user_id: msg.from.id },
+                (err, res) => {
+                    if(err) {
+                        self.logErr(err);
+                        return;
+                    }
+                    if(!res){
+                        self.getWelcome(msg);
+                        return;
+                    }
+                }
+            );
         }
         if (!this.usersSettings[msg.from.id]
             || !this.usersSettings[msg.from.id].userSetup) {
@@ -553,7 +606,17 @@ You don't have any setting yet. Please make a choice.`
     }
 
     private setBotListeners() {
-
+        this.bot.on('callbackQuery', msg => {
+            if (msg.data === this.CB_CHOICE[0].type) { /* same hour */
+                this.setSameHourSetting(msg);
+            } else if (msg.data === this.CB_CHOICE[1].type) { /* random hour */
+                this.setRandomHourSetting(msg);
+            } else if (msg.data === this.CB_CHOICE[2].type) { /* reset */
+                this.resetSetting(msg, true);
+            } else {
+                this.sendMessage(msg.from.id, `Wrong choice: ${msg.data}`);
+            }
+        });
     }
 
     private scrapeEngine(name: string,
@@ -685,27 +748,27 @@ You don't have any setting yet. Please make a choice.`
     private getUserObj(type: string): IUserSetup {
         return <IUserSetup>{
             type: type,
-            nextPhotoTime: moment()
+            nextPhotoTime: new Date()
         }
     }
 
     private getTotMillis(userObj: IUserSetup): number {
-        let totMillis = userObj.nextPhotoTime.valueOf() - moment().valueOf();
+        let totMillis = moment(userObj.nextPhotoTime).valueOf() - moment().valueOf();
         if (totMillis < 0 || isNaN(totMillis) || !isFinite(totMillis))
             totMillis = 60 * 1000 * 24;
         return totMillis;
     }
 
-    private getRandomicTimeHour(date: Moment): Moment {
+    private getRandomicTimeHour(date: Moment): Date {
         if (!date)
-            return moment().add(1, 'day').hours(0).add(this.getRandomic(24) + 1, 'hours');
-        return date.add(1, 'day').hours(0).add(this.getRandomic(24) + 1, 'hours');
+            return moment().add(1, 'day').hours(0).add(this.getRandomic(24) + 1, 'hours').toDate();
+        return date.add(1, 'day').hours(0).add(this.getRandomic(24) + 1, 'hours').toDate();
     }
 
-    private getSameTimeHour(date: Moment): Moment {
+    private getSameTimeHour(date: Moment): Date {
         if (!date)
-            return moment().add(1, 'day');
-        return date.add(1, 'day');
+            return moment().add(2, 'minutes').toDate();
+        return date.add(1, 'day').toDate();
     }
 
     private updateUserDBSetting(msg: Message, userObj: IUserSetup): void {
@@ -726,15 +789,31 @@ You don't have any setting yet. Please make a choice.`
     private settingInterval(msg: Message, totMillis: number, type: string): NodeJS.Timer {
         if (!type)
             type = this.CB_CHOICE[1].type;
+        const self: FlickrExpored = this;
         return setTimeout(function () {
-            this.getPhotoV2(msg);
-            if (this.usersSettings[msg.from.id]) {
-                if (type === this.CB_CHOICE[1].type)
-                    this.setRandomHourSetting(msg, true);
+            self.getPhotoV2(msg);
+            if (self.usersSettings[msg.from.id]) {
+                if (type === self.CB_CHOICE[1].type)
+                    self.setRandomHourSetting(msg, true);
                 else
-                    this.setSameHourSetting(msg, true);
+                    self.setSameHourSetting(msg, true);
             }
         }, totMillis, msg);
+    }
+
+    private setUser(msg: Message): IUserModel {
+        const user = <IUserModel>{
+            user_id: msg.from.id,
+            is_bot: msg.from.is_bot,
+            first_name: msg.from.first_name,
+            count: 0,
+            userSetup: null
+        }
+        if (msg.from.last_name)
+            user.last_name = msg.from.last_name;
+        if (msg.from.language_code)
+            user.language_code = msg.from.language_code;
+        return user;
     }
 
     private setHourSetting(msg: Message, type: string, hideMessage?: boolean, restoring?: boolean, noDBUpdate?: boolean) {
@@ -751,7 +830,7 @@ You don't have any setting yet. Please make a choice.`
                 ? this.getRandomicTimeHour(moment())
                 : this.getSameTimeHour(moment());
         else {
-            userObj.nextPhotoTime = moment(userDate);
+            userObj.nextPhotoTime = moment(userDate).toDate();
         }
 
         const totMillis = this.getTotMillis(userObj);
@@ -759,6 +838,9 @@ You don't have any setting yet. Please make a choice.`
         if (!noDBUpdate)
             this.updateUserDBSetting(msg, userObj);
 
+        if (!this.usersSettings[msg.from.id]) {
+            this.usersSettings[msg.from.id] = this.setUser(msg);
+        }
         this.usersSettings[msg.from.id].userSetup = userObj;
         this.usersSettings[msg.from.id].scheduledTimer = this.settingInterval(msg, totMillis, type);
 
@@ -774,12 +856,12 @@ You don't have any setting yet. Please make a choice.`
     }
 
     private setRandomHourSetting(msg: Message,
-        hideMessage: boolean, restoring?: boolean, noDBUpdate?: boolean) {
+        hideMessage?: boolean, restoring?: boolean, noDBUpdate?: boolean) {
         this.setHourSetting(msg, this.CB_CHOICE[1].type, hideMessage, restoring, noDBUpdate);
     }
 
     private setSameHourSetting(msg: Message,
-        hideMessage: boolean, restoring?: boolean, noDBUpdate?: boolean) {
+        hideMessage?: boolean, restoring?: boolean, noDBUpdate?: boolean) {
         this.setHourSetting(msg, this.CB_CHOICE[0].type, hideMessage, restoring, noDBUpdate);
     }
 
@@ -815,14 +897,14 @@ You don't have any setting yet. Please make a choice.`
 
                         if (moment.isMoment(result[i].userSetup.nextPhotoTime)
                             && moment(result[i].userSetup.nextPhotoTime).isAfter(moment())) {
-                            self.logInfo(`restoring user:${result[i].id}`);
+                            self.logInfo(`restoring user:${result[i].user_id}`);
                             if (result[i].userSetup.type === self.CB_CHOICE[0].type) {
                                 self.setSameHourSetting(msg, true, true, true);
                             } else {
                                 self.setRandomHourSetting(msg, true, true, true);
                             }
                         } else {
-                            self.logInfo(`restoring user and sending photo:${result[i].id}`);
+                            self.logInfo(`restoring user and sending photo:${result[i].user_id}`);
                             msg.message.date = moment();
                             self.getPhotoV2(msg);
                             if (result[i].userSetup.type === self.CB_CHOICE[0].type) {
