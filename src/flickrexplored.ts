@@ -17,6 +17,7 @@ import { IFlickrPhotoInfo } from './models/iflickrphotoinfo';
 import { IFlickrPhotoUrl } from './models/iflickrphotourl';
 import { UriOptions, CoreOptions } from 'request';
 import { Moment } from 'moment';
+import { IStats } from './models/istats';
 
 class FlickrExpored {
     private bot: telebot;
@@ -205,20 +206,6 @@ With @FlickrExplored_bot you can:
         fromSetting?: boolean,
         isNewUser?: boolean): Promise<void> {
         return new Promise<void>(async (resolve, reject) => {
-            if (Config.USEMONGO) {
-                const self: FlickrExpored = this;
-                this.userModel.update(
-                    { user_id: msg.from.id },
-                    { $inc: { 'count': 1 } },
-                    (err, raw) => {
-                        if (err) {
-                            self.logErr(err);
-                            return;
-                        }
-                        this.logInfo(`User ${this.getUserName(msg)}: count field updated`);
-                    });
-            }
-
             if (this.imgsObj.scrapeInProgress) {
                 //Go to waiting room.
                 this.waitingRoom.push(msg);
@@ -262,6 +249,20 @@ With @FlickrExplored_bot you can:
                     this.logErr(photo_url.message);
                     reject();
                     return;
+                }
+
+                if (Config.USEMONGO) {
+                    const self: FlickrExpored = this;
+                    this.userModel.update(
+                        { user_id: msg.from.id },
+                        { $inc: { 'count': 1 } },
+                        (err, raw) => {
+                            if (err) {
+                                self.logErr(err);
+                                return;
+                            }
+                            this.logInfo(`User ${this.getUserName(msg)}: count field updated`);
+                        });
                 }
 
                 this.sendMessage(msg, photo_url.url);
@@ -464,12 +465,38 @@ With @FlickrExplored_bot you can:
         Send your location and get top five photos near you. `;
     }
 
-    private getStats(msg: Message): string {
-        return JSON.stringify({
-            lastUpdate: this.imgsObj.lastUpdate,
-            imgsLength: this.imgsObj.imgs.length,
-            scrapeInProgress: this.imgsObj.scrapeInProgress
-        }, null, 4);
+    private getStats(msg: Message): Promise<string> {
+        return new Promise<string>((resolve, reject) => {
+            const stats: IStats = {
+                allUsers: 0,
+                activeUsers: 0,
+                botUsers: 0,
+                totalImagesRequested: 0,
+                lastUpdate: this.imgsObj.lastUpdate,
+                imgsLength: this.imgsObj.imgs.length,
+                scrapeInProgress: this.imgsObj.scrapeInProgress
+            };
+            this.userModel.find((err, res) => {
+                if (err) {
+                    this.logErr(err);
+                    reject(err);
+                    return;
+                }
+                async.forEachSeries<IUserModel, Error>(res,
+                    (item, cb) => {
+                        stats.allUsers++;
+                        if (item.is_bot)
+                            stats.botUsers++;
+                        if (item.is_stopped === false)
+                            stats.activeUsers++;
+                        stats.totalImagesRequested += item.count;
+                        cb(null);
+                    },
+                    err => {
+                        resolve(JSON.stringify(stats, null, 4));
+                    });
+            });
+        });
     }
 
     private about(msg: Message): void {
@@ -775,11 +802,13 @@ You don't have any setting yet. Please make a choice.`
 
     private setBotCommand() {
         this.bot.on('/start', (msg) => { this.getWelcome(msg); });
-        this.bot.on('/photo', (msg) => { this.getPhotoV2(msg)
-                                             .catch(err => { this.logErr(err);}); });
+        this.bot.on('/photo', (msg) => {
+            this.getPhotoV2(msg)
+                .catch(err => { this.logErr(err); });
+        });
         this.bot.on('/help', (msg) => { this.sendMessage(msg, this.usage()); });
         this.bot.on('/about', (msg) => { this.about(msg); });
-        this.bot.on('/stats', (msg) => { this.sendMessage(msg, this.getStats(msg)); });
+        this.bot.on('/stats', async (msg) => { this.getStats(msg).then(text => { this.sendMessage(msg, text) }).catch(err => { }); });
         this.bot.on('/stop', (msg) => { this.getStop(msg); });
         this.bot.on('/setup', (msg) => { this.setup(msg); });
         this.bot.on('inlineQuery', (msg) => { this.flickrSearch(msg); });
@@ -887,7 +916,7 @@ You don't have any setting yet. Please make a choice.`
                             cb(null);
                         })
                         .catch(err => {
-                            this.logErr(`Error in getPhotoIdsEngine:${err.name} -> ${err.statusCode}`);
+                            this.logErr(`Error in scrapeImg:${err.name} -> ${err.statusCode}`);
                             cb(null);
                         });
                 },
@@ -904,12 +933,14 @@ You don't have any setting yet. Please make a choice.`
 
                     if (item)
                         this.logInfo('Empty the waiting room.');
+
                     const self: FlickrExpored = this;
+
                     function empty_waiting_room() {
                         while (item && count < 10) {
                             ++count;
-                            this.getPhotoV2(item);
-                            item = this.waitingRoom.pop();
+                            self.getPhotoV2(item).catch();
+                            item = self.waitingRoom.pop();
                         }
 
                         if (item) {
@@ -1078,7 +1109,7 @@ You don't have any setting yet. Please make a choice.`
                             }
                         };
 
-                        if (moment.isMoment(result[i].userSetup.nextPhotoTime)
+                        if (result[i].userSetup.nextPhotoTime
                             && moment(result[i].userSetup.nextPhotoTime).isAfter(moment())) {
                             self.logInfo(`restoring user:${result[i].user_id}`);
                             if (result[i].userSetup.type === self.CB_CHOICE[0].type) {
