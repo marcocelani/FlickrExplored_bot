@@ -634,7 +634,7 @@ You don't have any setting yet. Please make a choice.`
         this.searchPhoto(msg, this.prepareRPSearchObj(query), answers);
     }
 
-    private prepareRPSearchObj(query: string): UriOptions & CoreOptions {
+    private prepareRPSearchObj(query?: string): UriOptions & CoreOptions {
         const INDEX: number = 3; //photo.search
         return {
             uri: FlickrConfig.ENDPOINT,
@@ -648,7 +648,7 @@ You don't have any setting yet. Please make a choice.`
                 extras: FlickrConfig.EXTRAS[INDEX],
                 per_page: FlickrConfig.PER_PAGE[INDEX],
                 page: FlickrConfig.PAGE[INDEX],
-                format: FlickrConfig.FORMAT,
+                format: FlickrCoßznfig.FORMAT,
                 nojsoncallback: FlickrConfig.NOJSONCB,
             },
             json: true
@@ -657,7 +657,7 @@ You don't have any setting yet. Please make a choice.`
 
     private searchPhoto(msg: Message,
         rpObj: UriOptions & CoreOptions,
-        answers: telebot.AnswerList) {
+        answers?: telebot.AnswerList) {
         if (!msg && rpObj)
             return;
 
@@ -737,9 +737,24 @@ You don't have any setting yet. Please make a choice.`
         return url_arr;
     }
 
+    private isGeoSearch(msg: Message): boolean {
+        if (!msg &&
+            !msg.location &&
+            !msg.location.latitude &&
+            !msg.location.longitude)
+            return false;
+        return true;
+    }
+
     private flickrGeoSearch(msg: Message): void {
+        if (!this.isGeoSearch(msg))
+            return;
 
-
+        let rpObj = this.prepareRPSearchObj()
+        rpObj.qs.lat = msg.location.latitude;
+        rpObj.qs.lon = msg.location.longitude;
+        rpObj.qs.per_page = 5;
+        this.searchPhoto(msg, rpObj);
     }
 
     private setBotCommand() {

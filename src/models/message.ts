@@ -11,6 +11,10 @@ interface Chat {
     type: string;
     title?: string;
 }
+interface ILocation {
+    latitude: number;
+    longitude: number;
+}
 export interface Message {
     id: string;
     from?: User;
@@ -18,4 +22,5 @@ export interface Message {
     chat: Chat;
     message?: any;
     query?: string;
+    location?: ILocation;
 }
