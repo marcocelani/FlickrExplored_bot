@@ -14,6 +14,7 @@ import { Model } from 'mongoose';
 import { Message } from './models/message';
 import { ITask } from './models/itask';
 import { IFlickrPhotoInfo } from './models/iflickrphotoinfo';
+import { IFlickrPhotoUrl } from './models/iflickrphotourl';
 import { UriOptions, CoreOptions } from 'request';
 import { Moment } from 'moment';
 
@@ -559,11 +560,11 @@ You don't have any setting yet. Please make a choice.`
             const self: FlickrExpored = this;
             this.userModel.findOne({ user_id: msg.from.id },
                 (err, res) => {
-                    if(err) {
+                    if (err) {
                         self.logErr(err);
                         return;
                     }
-                    if(!res){
+                    if (!res) {
                         self.getWelcome(msg);
                         return;
                     }
@@ -586,10 +587,158 @@ You don't have any setting yet. Please make a choice.`
     }
 
     private flickrSearch(msg: Message): void {
+        if (!msg)
+            return;
 
+        let query = '';
+        if (msg.query)
+            query = msg.query.trim();
+
+        const answers: telebot.AnswerList = this.bot.answerList(msg.id, { cacheTime: 60 });
+
+        if (query === ''
+            && this.imgsObj.imgs.length > 0) {
+            const idArr = this.imgsObj.imgs[this.getRandomic(this.imgsObj.imgs.length - 1)].imgsArr;
+            const self: FlickrExpored = this;
+            async.each(idArr,
+                (id, cb) => {
+                    self.getPhotoUrlFromId(id)
+                        .then(result => {
+                            if (result.stat === 'fail') {
+                                self.logErr(`error in flickrSearch[async.each]:${result.message}`);
+                                cb(null);
+                                return;
+                            }
+                            answers.addPhoto({
+                                id: id,
+                                title: result.title,
+                                photo_url: result.url_physic_z,
+                                thumb_url: result.url_physic_z,
+                                input_message_content: { message_text: result.url }
+                            });
+                            cb(null);
+                        });
+                },
+                (err) => {
+                    if (err) {
+                        //self.log('ERR', err);
+                        return;
+                    }
+                    this.bot.answerQuery(answers);
+                }
+            );
+
+            return;
+        }
+
+        this.searchPhoto(msg, this.prepareRPSearchObj(query), answers);
+    }
+
+    private prepareRPSearchObj(query: string): UriOptions & CoreOptions {
+        const INDEX: number = 3; //photo.search
+        return {
+            uri: FlickrConfig.ENDPOINT,
+            qs: {
+                method: FlickrConfig.METHODS[INDEX],
+                api_key: FlickrConfig.API_KEY,
+                text: (query) ? query : '',
+                sort: FlickrConfig.SORT[INDEX],
+                parse_tag: FlickrConfig.PARSE_TAG[INDEX],
+                content_type: FlickrConfig.CONTENT_TYPE[INDEX],
+                extras: FlickrConfig.EXTRAS[INDEX],
+                per_page: FlickrConfig.PER_PAGE[INDEX],
+                page: FlickrConfig.PAGE[INDEX],
+                format: FlickrConfig.FORMAT,
+                nojsoncallback: FlickrConfig.NOJSONCB,
+            },
+            json: true
+        };
+    }
+
+    private searchPhoto(msg: Message,
+        rpObj: UriOptions & CoreOptions,
+        answers: telebot.AnswerList) {
+        if (!msg && rpObj)
+            return;
+
+        rp(rpObj)
+            .then(response => {
+                if (response.stat === 'fail') {
+                    this.logErr(this.getMsgError(response));
+                    return;
+                }
+
+                let photosArr: Array<any> = response.photos.photo;
+
+                if (!photosArr)
+                    return;
+
+                if (photosArr.length == 0) {
+                    this.sendMessage(msg, `Sorry, no photos found.`);
+                }
+
+                async.each(photosArr,
+                    (photo, cb) => {
+                        this.getPhotoUrlFromId(photo.id)
+                            .then(result => {
+                                if (result.stat === 'fail') {
+                                    console.log(result);
+                                    cb(null);
+                                    return;
+                                }
+                                const url_arr = this.buildUrlArr(photo);
+                                if (url_arr.length == 0) {
+                                    cb(null);
+                                    return;
+                                }
+                                if (answers) {
+                                    answers.addPhoto({
+                                        id: photo.id,
+                                        title: photo.title,
+                                        photo_url: url_arr[0].url,
+                                        photo_width: parseInt(url_arr[0].width),
+                                        photo_height: parseInt(url_arr[0].height),
+                                        thumb_url: url_arr[0].url,
+                                        input_message_content: { message_text: result.url }
+                                    });
+                                } else {
+                                    this.sendMessage(msg, result.url);
+                                }
+
+                                cb(null);
+                            });
+                    },
+                    (err) => {
+                        if (answers) {
+                            this.bot.answerQuery(answers);
+                        }
+                    }
+                );
+            })
+            .catch(err => {
+                console.log(`error in searchPhoto:${err.name} -> ${err.statusCode}`)
+            });
+    }
+
+    private buildUrlArr(photo: any): Array<IFlickrPhotoUrl> {
+        const url_arr: Array<IFlickrPhotoUrl> = [];
+        if (photo.width_m && photo.height_m)
+            url_arr.push({ url: photo.url_m, width: photo.width_m, height: photo.height_m });
+        if (photo.width_n && photo.height_n)
+            url_arr.push({ url: photo.url_n, width: photo.width_n, height: photo.height_n });
+        if (photo.width_z && photo.height_z)
+            url_arr.push({ url: photo.url_z, width: photo.width_z, height: photo.height_z });
+        if (photo.width_c && photo.height_c)
+            url_arr.push({ url: photo.url_c, width: photo.width_c, height: photo.height_c });
+        if (photo.width_l && photo.height_l)
+            url_arr.push({ url: photo.url_l, width: photo.width_l, height: photo.height_l });
+        if (photo.width_o && photo.height_o)
+            url_arr.push({ url: photo.url_o, width: photo.width_o, height: photo.height_o });
+        return url_arr;
     }
 
     private flickrGeoSearch(msg: Message): void {
+
 
     }
 
@@ -886,7 +1035,7 @@ You don't have any setting yet. Please make a choice.`
                 function compute_restoring() {
                     for (i = sidx; i < (sidx + size) && i < result.length; ++i) {
                         let msg: Message = {
-                            message_id: 0,
+                            id: '',
                             date: 0,
                             chat: null,
                             from: { id: result[i].user_id, is_bot: false, first_name: '' },

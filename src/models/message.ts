@@ -1,6 +1,6 @@
 interface User {
-    id : number;
-    is_bot : boolean;
+    id: number;
+    is_bot: boolean;
     first_name: string;
     last_name?: string;
     username?: string;
@@ -12,9 +12,10 @@ interface Chat {
     title?: string;
 }
 export interface Message {
-    message_id : number;
-    from? : User;
-    date : number;
-    chat : Chat;
-    message? : any;
+    id: string;
+    from?: User;
+    date: number;
+    chat: Chat;
+    message?: any;
+    query?: string;
 }
