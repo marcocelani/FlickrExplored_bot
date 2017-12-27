@@ -255,7 +255,10 @@ With @FlickrExplored_bot you can:
                     const self: FlickrExpored = this;
                     this.userModel.update(
                         { user_id: msg.from.id },
-                        { $inc: { 'count': 1 } },
+                        {
+                            $inc: { 'count': 1 },
+                            $set: { is_stopped: false }
+                        },
                         (err, raw) => {
                             if (err) {
                                 self.logErr(err);
@@ -476,6 +479,11 @@ With @FlickrExplored_bot you can:
                 imgsLength: this.imgsObj.imgs.length,
                 scrapeInProgress: this.imgsObj.scrapeInProgress
             };
+            if (!Config.USEMONGO) {
+                this.logInfo(`Cannot quering mongo due app configuration.`);
+                resolve(JSON.stringify(stats, null, 4));
+                return;
+            }
             this.userModel.find((err, res) => {
                 if (err) {
                     this.logErr(err);
@@ -988,7 +996,12 @@ You don't have any setting yet. Please make a choice.`
             return;
         this.userModel.findOneAndUpdate(
             { user_id: msg.from.id },
-            { $set: { userSetup: (userObj) ? { nextPhotoTime: userObj.nextPhotoTime, type: userObj.type } : null } },
+            {
+                $set: {
+                    userSetup: (userObj) ? { nextPhotoTime: userObj.nextPhotoTime, type: userObj.type } : null,
+                    is_stopped: false
+                }
+            },
             (err, doc, res) => {
                 if (err) {
                     this.logErr(err);
