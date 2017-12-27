@@ -144,18 +144,27 @@ With @FlickrExplored_bot you can:
                         .exec();
                     const self: FlickrExpored = this;
                     if (!user)
-                        await this.insertNewDoc(msg);
+                        try {
+                            await this.insertNewDoc(msg);
+                        }
+                        catch (err) {
+                            throw err;
+                        }
                     else
-                        await this.userModel.update(
-                            { user_id: msg.from.id },
-                            { is_stopped: false },
-                            (err, raw) => {
-                                if (err) {
-                                    self.logErr(err);
-                                    return;
+                        try {
+                            await this.userModel.update(
+                                { user_id: msg.from.id },
+                                { is_stopped: false },
+                                (err, raw) => {
+                                    if (err) {
+                                        self.logErr(err);
+                                        return;
+                                    }
                                 }
-                            }
-                        );
+                            );
+                        } catch (err) {
+                            throw err;
+                        }
 
                 }
                 catch (err) {
@@ -168,12 +177,15 @@ With @FlickrExplored_bot you can:
     }
 
     private getWelcome(msg: Message): void {
+        const self: FlickrExpored = this;
         this.setDBUser(msg)
             .then(() => {
-                this.getPhotoV2(msg, false, true)
+                self.getPhotoV2(msg, false, true)
                     .then(() => {
-                        this.sendMessage(msg, `${this.welcomeText(msg)}${this.usage()}`, { replyMarkup: this.getRateMarkUp() });
-                    })
+                        self.sendMessage(msg, `${this.welcomeText(msg)}${this.usage()}`, { replyMarkup: this.getRateMarkUp() });
+                    }).catch(err => {
+                        self.logErr(err);
+                    });
             });
     }
 
@@ -212,11 +224,13 @@ With @FlickrExplored_bot you can:
                 this.waitingRoom.push(msg);
                 this.logInfo(`user ${msg.from.id} into waiting room.`);
                 this.sendMessage(msg, `A scrape job is in progress. When job is done you will receive the photo. Sorry for the inconvenient.`);
+                resolve();
                 return;
             }
             if (this.imgsObj.imgs.length == 0) {
                 this.logErr(`imgs is empty`);
                 this.sendMessage(msg, `Images not available at moment. Please try later.`);
+                resolve();
                 return;
             }
 
@@ -230,12 +244,14 @@ With @FlickrExplored_bot you can:
                 else {
                     this.logErr(`imgsIds is empty.`);
                     this.replyError(msg);
+                    reject(new Error(`imgsIds is empty.`));
                     return;
                 }
             }
             else {
                 this.logErr(`imgs is empty.`);
                 this.replyError(msg);
+                reject(new Error(`imgs is`));
                 return;
             }
 
@@ -759,7 +775,8 @@ You don't have any setting yet. Please make a choice.`
 
     private setBotCommand() {
         this.bot.on('/start', (msg) => { this.getWelcome(msg); });
-        this.bot.on('/photo', (msg) => { this.getPhotoV2(msg); });
+        this.bot.on('/photo', (msg) => { this.getPhotoV2(msg)
+                                             .catch(err => { this.logErr(err);}); });
         this.bot.on('/help', (msg) => { this.sendMessage(msg, this.usage()); });
         this.bot.on('/about', (msg) => { this.about(msg); });
         this.bot.on('/stats', (msg) => { this.sendMessage(msg, this.getStats(msg)); });
@@ -955,7 +972,8 @@ You don't have any setting yet. Please make a choice.`
             type = this.CB_CHOICE[1].type;
         const self: FlickrExpored = this;
         return setTimeout(function () {
-            self.getPhotoV2(msg);
+            self.getPhotoV2(msg)
+                .catch(err => { self.logErr(err); });
             if (self.usersSettings[msg.from.id]) {
                 if (type === self.CB_CHOICE[1].type)
                     self.setRandomHourSetting(msg, true);
@@ -1012,7 +1030,8 @@ You don't have any setting yet. Please make a choice.`
             && !restoring
             && !noDBUpdate) {
 
-            this.getPhotoV2(msg, true);
+            this.getPhotoV2(msg, true)
+                .catch(err => { this.logErr(err); });
         }
 
         if (hideMessage && restoring)
@@ -1070,7 +1089,8 @@ You don't have any setting yet. Please make a choice.`
                         } else {
                             self.logInfo(`restoring user and sending photo:${result[i].user_id}`);
                             msg.message.date = moment();
-                            self.getPhotoV2(msg);
+                            self.getPhotoV2(msg)
+                                .catch(err => { self.logErr(err); });
                             if (result[i].userSetup.type === self.CB_CHOICE[0].type) {
                                 self.setSameHourSetting(msg, true);
                             } else {
