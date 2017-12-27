@@ -648,7 +648,7 @@ You don't have any setting yet. Please make a choice.`
                 extras: FlickrConfig.EXTRAS[INDEX],
                 per_page: FlickrConfig.PER_PAGE[INDEX],
                 page: FlickrConfig.PAGE[INDEX],
-                format: FlickrCoßznfig.FORMAT,
+                format: FlickrConfig.FORMAT,
                 nojsoncallback: FlickrConfig.NOJSONCB,
             },
             json: true
