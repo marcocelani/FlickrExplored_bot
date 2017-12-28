@@ -4,7 +4,7 @@ import * as async from 'async';
 import * as htmlparser from 'htmlparser2';
 import * as moment from 'moment';
 import * as mongoose from 'mongoose';
-import { Config } from './config';
+import { Config } from './Config';
 import { FlickrConfig } from './flickrconfig';
 import { IImgsCore, IImg } from './iimgscore'
 import { ICBChoice } from './models/icbchoice'
@@ -460,12 +460,12 @@ With @FlickrExplored_bot you can:
 
     private usage(): string {
         return `Type /photo for pick a photo.
-        Type /setup for setting some options.
-        Type /help for showing help.
-        Type /about for showing info.
-        Type /stop for stopping.
-        Search photos with inline query.
-        Send your location and get top five photos near you. `;
+Type /setup for setting some options.
+Type /help for showing help.
+Type /about for showing info.
+Type /stop for stopping.
+Search photos with inline query.
+Send your location and get top five photos near you. `;
     }
 
     private getStats(msg: Message): Promise<string> {

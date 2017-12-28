@@ -2,3 +2,5 @@ config.js
 node_modules/**
 dist/**/*.*
 src/Config.ts
+utils/updateDB.ts
+utils/updateDB.js
