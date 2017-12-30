@@ -41,14 +41,10 @@ class FlickrExpored {
     constructor() {
         this.logInfo(`Starting ${Config.APP_NAME}[PID:${process.pid}]`);
         process.on('SIGINT', () => {
-            if (Config.USEMONGO) {
-                this.closeMongoConnection();
-            }
+            this.killProcess();
         });
         process.on('SIGTERM', () => {
-            if (Config.USEMONGO) {
-                this.closeMongoConnection();
-            }
+            this.killProcess();
         });
         process.on('unhandledRejection', error => {
             const self: FlickrExpored = this;
@@ -76,7 +72,19 @@ class FlickrExpored {
         this.userModel = new UserModel().user;
     }
 
-    private closeMongoConnection() {
+    private killProcess(): void {
+        if (Config.USEMONGO) {
+            this.closeMongoConnection();
+        }
+        this.killBot();
+    }
+
+    private killBot(): void{
+        this.bot.deleteWebhook();
+        this.bot.stop(`${Config.APP_NAME} stopped.`);
+    }
+
+    private closeMongoConnection(): void {
         const self: FlickrExpored = this;
         mongoose.connection.close(() => {
             self.logInfo('Mongoose default connection disconnected through app termination.');
