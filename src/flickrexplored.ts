@@ -50,6 +50,10 @@ class FlickrExpored {
                 this.closeMongoConnection();
             }
         });
+        process.on('unhandledRejection', error => {
+            const self: FlickrExpored = this;
+            this.logErr(error);
+          });
         if (Config.USEMONGO) {
             (<any>mongoose).Promise = global.Promise;
             mongoose.connect(Config.MONGO_URI, { useMongoClient: true });
@@ -122,7 +126,7 @@ With @FlickrExplored_bot you can:
                 user.save((err, res, affected) => {
                     if (err) {
                         this.logErr(err);
-                        reject();
+                        reject(err);
                         return;
                     }
                     this.logInfo(`user[${this.getUserName(msg)}] saved.`);
@@ -145,28 +149,18 @@ With @FlickrExplored_bot you can:
                         .exec();
                     const self: FlickrExpored = this;
                     if (!user)
-                        try {
-                            await this.insertNewDoc(msg);
-                        }
-                        catch (err) {
-                            throw err;
-                        }
+                        await this.insertNewDoc(msg);
                     else
-                        try {
-                            await this.userModel.update(
-                                { user_id: msg.from.id },
-                                { is_stopped: false },
-                                (err, raw) => {
-                                    if (err) {
-                                        self.logErr(err);
-                                        return;
-                                    }
+                        await this.userModel.update(
+                            { user_id: msg.from.id },
+                            { is_stopped: false },
+                            (err, raw) => {
+                                if (err) {
+                                    self.logErr(err);
+                                    return;
                                 }
-                            );
-                        } catch (err) {
-                            throw err;
-                        }
-
+                            }
+                        );
                 }
                 catch (err) {
                     this.logErr(err);
@@ -247,7 +241,7 @@ With @FlickrExplored_bot you can:
                 if (photo_url.stat === 'fail') {
                     this.replyError(msg);
                     this.logErr(photo_url.message);
-                    reject();
+                    reject(new Error(photo_url.message));
                     return;
                 }
 
@@ -274,6 +268,7 @@ With @FlickrExplored_bot you can:
             }
             catch (err) {
                 this.logErr(err);
+                reject(err);
             }
             finally {
                 resolve();
@@ -809,6 +804,7 @@ You don't have any setting yet. Please make a choice.`
     }
 
     private setBotCommand() {
+        const self: FlickrExpored = this;
         this.bot.on('/start', (msg) => { this.getWelcome(msg); });
         this.bot.on('/photo', (msg) => {
             this.getPhotoV2(msg)
@@ -816,7 +812,11 @@ You don't have any setting yet. Please make a choice.`
         });
         this.bot.on('/help', (msg) => { this.sendMessage(msg, this.usage()); });
         this.bot.on('/about', (msg) => { this.about(msg); });
-        this.bot.on('/stats', async (msg) => { this.getStats(msg).then(text => { this.sendMessage(msg, text) }).catch(err => { }); });
+        this.bot.on('/stats', async (msg) => {
+            this.getStats(msg)
+                .then(text => { this.sendMessage(msg, text) })
+                .catch(err => { self.logErr(err); });
+        });
         this.bot.on('/stop', (msg) => { this.getStop(msg); });
         this.bot.on('/setup', (msg) => { this.setup(msg); });
         this.bot.on('inlineQuery', (msg) => { this.flickrSearch(msg); });
@@ -947,7 +947,7 @@ You don't have any setting yet. Please make a choice.`
                     function empty_waiting_room() {
                         while (item && count < 10) {
                             ++count;
-                            self.getPhotoV2(item).catch();
+                            self.getPhotoV2(item).catch(err => self.logErr(err));
                             item = self.waitingRoom.pop();
                         }
 
@@ -1073,9 +1073,9 @@ You don't have any setting yet. Please make a choice.`
         if (!hideMessage
             && !restoring
             && !noDBUpdate) {
-
+            const self: FlickrExpored = this;
             this.getPhotoV2(msg, true)
-                .catch(err => { this.logErr(err); });
+                .catch(err => { self.logErr(err); });
         }
 
         if (hideMessage && restoring)
