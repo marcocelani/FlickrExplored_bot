@@ -49,7 +49,7 @@ class FlickrExpored {
         process.on('unhandledRejection', error => {
             const self: FlickrExpored = this;
             this.logErr(error);
-          });
+        });
         if (Config.USEMONGO) {
             (<any>mongoose).Promise = global.Promise;
             mongoose.connect(Config.MONGO_URI, { useMongoClient: true });
@@ -79,7 +79,7 @@ class FlickrExpored {
         this.killBot();
     }
 
-    private killBot(): void{
+    private killBot(): void {
         this.bot.deleteWebhook();
         this.bot.stop(`${Config.APP_NAME} stopped.`);
     }
@@ -1120,16 +1120,7 @@ You don't have any setting yet. Please make a choice.`
 
                 function compute_restoring() {
                     for (i = sidx; i < (sidx + size) && i < result.length; ++i) {
-                        let msg: Message = {
-                            id: '',
-                            date: 0,
-                            chat: null,
-                            from: { id: result[i].user_id, is_bot: false, first_name: '' },
-                            message: {
-                                date: result[i].userSetup.nextPhotoTime
-                            }
-                        };
-
+                        let msg: Message = self.buildRestoringUserMsg(result[i].user_id, result[i].userSetup.nextPhotoTime);
                         if (result[i].userSetup.nextPhotoTime
                             && moment(result[i].userSetup.nextPhotoTime).isAfter(moment())) {
                             self.logInfo(`restoring user:${result[i].user_id}`);
@@ -1161,6 +1152,18 @@ You don't have any setting yet. Please make a choice.`
             });
     }
 
+    private buildRestoringUserMsg(user_id: number, nextPhotoTime: Date): Message {
+        return {
+            id: '',
+            date: 0,
+            chat: null,
+            from: { id: user_id, is_bot: false, first_name: '' },
+            message: {
+                date: nextPhotoTime
+            }
+        };
+    }
+
     private removeFirstItem(): void {
         if (this.imgsObj.lastUpdate) {
             if (this.imgsObj.scrapeInProgress) {
@@ -1176,7 +1179,35 @@ You don't have any setting yet. Please make a choice.`
         }
     }
 
-    private intervalledTask() {
+    private checkUsersSetting(): void {
+        this.logInfo(`Checking users setting...`);
+        async.forEach<string, Error>(
+            Object.keys(this.usersSettings),
+            (item, next) => {
+                const user: IUserModel = this.usersSettings[item];
+                if (user.userSetup
+                    && user.userSetup.nextPhotoTime
+                    && moment(user.userSetup.nextPhotoTime).isValid()
+                    && moment(user.userSetup.nextPhotoTime).isSameOrBefore(moment())) {
+                    let msg: Message = this.buildRestoringUserMsg(user.user_id, user.userSetup.nextPhotoTime);
+                    this.logInfo(`restoring user and sending photo:${item}`);
+                    msg.message.date = moment();
+                    this.getPhotoV2(msg)
+                        .catch(err => { this.logErr(err); });
+                    if (this.usersSettings[item].userSetup.type === this.CB_CHOICE[0].type) {
+                        this.setSameHourSetting(msg, true);
+                    } else {
+                        this.setRandomHourSetting(msg, true);
+                    }
+                }
+                next(null);
+            },
+            () => {
+                this.logInfo(`Checking users setting: done.`);
+            });
+    }
+
+    private intervalledTask(): void {
         setInterval(() => {
             this.removeFirstItem()
         },
@@ -1185,6 +1216,9 @@ You don't have any setting yet. Please make a choice.`
         setInterval(() => {
             this.scrapeImg()
         }, Config.IMGS_REFRESH_TIME);
+        setInterval(() => {
+            this.checkUsersSetting()
+        }, Config.USERS_SETTING_CHECK);
     }
 
     init() {
