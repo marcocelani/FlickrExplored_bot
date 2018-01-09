@@ -1185,7 +1185,8 @@ You don't have any setting yet. Please make a choice.`
             Object.keys(this.usersSettings),
             (item, next) => {
                 const user: IUserModel = this.usersSettings[item];
-                if (user.userSetup
+                if (user
+                    && user.userSetup
                     && user.userSetup.nextPhotoTime
                     && moment(user.userSetup.nextPhotoTime).isValid()
                     && moment(user.userSetup.nextPhotoTime).isSameOrBefore(moment())) {
