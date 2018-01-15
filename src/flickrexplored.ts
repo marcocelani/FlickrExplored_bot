@@ -4,6 +4,7 @@ import * as async from 'async';
 import * as htmlparser from 'htmlparser2';
 import * as moment from 'moment';
 import * as mongoose from 'mongoose';
+import * as AsyncLock from 'async-lock';
 import { Config } from './Config';
 import { FlickrConfig } from './flickrconfig';
 import { IImgsCore, IImg } from './iimgscore'
@@ -37,6 +38,7 @@ class FlickrExpored {
         { type: 'randomHour', text: 'Every Day [random hour]' },
         { type: 'deleteSetup', text: 'Remove setting.' }
     ];
+    private lock: AsyncLock;
     /**************************/
     constructor() {
         this.logInfo(`Starting ${Config.APP_NAME}[PID:${process.pid}]`);
@@ -70,6 +72,7 @@ class FlickrExpored {
         };
         this.bot = new telebot(Config.TELEBOT_OPT);
         this.userModel = new UserModel().user;
+        this.lock = new AsyncLock();
     }
 
     private killProcess(): void {
@@ -1059,12 +1062,27 @@ You don't have any setting yet. Please make a choice.`
         let userObj = this.getUserObj(type);
 
         const userDate = moment(msg.message.date).toDate();
-        if (!restoring)
-            userObj.nextPhotoTime = (type === this.CB_CHOICE[1].type)
-                ? this.getRandomicTimeHour(moment())
-                : this.getSameTimeHour(moment());
-        else {
-            userObj.nextPhotoTime = moment(userDate).toDate();
+        if (!restoring) {
+            this.logInfo(`acquiring lock[${'user'+msg.from.id}]...`);
+            this.lock.acquire('user' + msg.from.id, done => {
+                this.logInfo(`lock[${'user'+msg.from.id}] acquired.`);
+                userObj.nextPhotoTime = (type === this.CB_CHOICE[1].type)
+                    ? this.getRandomicTimeHour(moment())
+                    : this.getSameTimeHour(moment());
+                done(null);
+            }, (err, ret) => {
+                this.logInfo(`lock[${'user'+msg.from.id}] released.`);
+            });
+
+        } else {
+            this.logInfo(`acquiring lock[${'user'+msg.from.id}]...`);
+            this.lock.acquire('user' + msg.from.id, done => {
+                this.logInfo(`lock[${'user'+msg.from.id}] acquired.`);
+                userObj.nextPhotoTime = moment(userDate).toDate();
+                done(null);
+            }, (err, ret) => {
+                this.logInfo(`lock[${'user'+msg.from.id}] released.`);
+            });
         }
 
         const totMillis = this.getTotMillis(userObj);
@@ -1187,21 +1205,29 @@ You don't have any setting yet. Please make a choice.`
                 const user: IUserModel = this.usersSettings[item];
                 if (user
                     && user.userSetup
-                    && user.userSetup.nextPhotoTime
-                    && moment(user.userSetup.nextPhotoTime).isValid()
-                    && moment(user.userSetup.nextPhotoTime).isSameOrBefore(moment())) {
-                    let msg: Message = this.buildRestoringUserMsg(user.user_id, user.userSetup.nextPhotoTime);
-                    this.logInfo(`restoring user and sending photo:${item}`);
-                    msg.message.date = moment();
-                    this.getPhotoV2(msg)
-                        .catch(err => { this.logErr(err); });
-                    if (this.usersSettings[item].userSetup.type === this.CB_CHOICE[0].type) {
-                        this.setSameHourSetting(msg, true);
-                    } else {
-                        this.setRandomHourSetting(msg, true);
-                    }
+                    && user.userSetup.nextPhotoTime) {
+                        this.logInfo(`acquiring lock[${'user'+user.user_id}]...`);
+                    this.lock.acquire('user' + user.id, done => {
+                        this.logInfo(`lock[${'user'+user.user_id}] acquired.`);
+                        if (moment(user.userSetup.nextPhotoTime).isValid()
+                            && moment(user.userSetup.nextPhotoTime).isSameOrBefore(moment())) {
+                            let msg: Message = this.buildRestoringUserMsg(user.user_id, user.userSetup.nextPhotoTime);
+                            this.logInfo(`restoring user and sending photo:${item}`);
+                            msg.message.date = moment();
+                            this.getPhotoV2(msg)
+                                .catch(err => { this.logErr(err); });
+                            if (this.usersSettings[item].userSetup.type === this.CB_CHOICE[0].type) {
+                                this.setSameHourSetting(msg, true);
+                            } else {
+                                this.setRandomHourSetting(msg, true);
+                            }
+                        }
+                        done(null);
+                    }, (err, ret) => {
+                        this.logInfo(`lock[${'user'+user.user_id}] released.`);
+                        next(null);
+                    });
                 }
-                next(null);
             },
             () => {
                 this.logInfo(`Checking users setting: done.`);
