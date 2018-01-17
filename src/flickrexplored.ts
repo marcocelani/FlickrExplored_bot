@@ -385,11 +385,11 @@ With @FlickrExplored_bot you can:
         if (!type)
             type = 'INFO';
         if (mex instanceof Error)
-            console.error(`[${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex.message}`);
+            console.error(`[${process.pid}][${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex.message}`);
         else
             (type === 'ERR')
-                ? console.error(`[${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex}`)
-                : console.log(`[${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex}`);
+                ? console.error(`[${process.pid}][${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex}`)
+                : console.log(`[${process.pid}][${type}][${moment().format('DD/MM/YYYY HH:mm:ss')}] ${mex}`);
     }
 
     private resetTime(msg: Message): void {
