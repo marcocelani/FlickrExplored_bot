@@ -1063,25 +1063,21 @@ You don't have any setting yet. Please make a choice.`
 
         const userDate = moment(msg.message.date).toDate();
         if (!restoring) {
-            this.logInfo(`acquiring lock[${'user'+msg.from.id}]...`);
             this.lock.acquire('user' + msg.from.id, done => {
-                this.logInfo(`lock[${'user'+msg.from.id}] acquired.`);
                 userObj.nextPhotoTime = (type === this.CB_CHOICE[1].type)
                     ? this.getRandomicTimeHour(moment())
                     : this.getSameTimeHour(moment());
                 done(null);
             }, (err, ret) => {
-                this.logInfo(`lock[${'user'+msg.from.id}] released.`);
+                /* NOP */
             });
 
         } else {
-            this.logInfo(`acquiring lock[${'user'+msg.from.id}]...`);
             this.lock.acquire('user' + msg.from.id, done => {
-                this.logInfo(`lock[${'user'+msg.from.id}] acquired.`);
                 userObj.nextPhotoTime = moment(userDate).toDate();
                 done(null);
             }, (err, ret) => {
-                this.logInfo(`lock[${'user'+msg.from.id}] released.`);
+                /* NOP */
             });
         }
 
@@ -1206,9 +1202,7 @@ You don't have any setting yet. Please make a choice.`
                 if (user
                     && user.userSetup
                     && user.userSetup.nextPhotoTime) {
-                        this.logInfo(`acquiring lock[${'user'+user.user_id}]...`);
                     this.lock.acquire('user' + user.id, done => {
-                        this.logInfo(`lock[${'user'+user.user_id}] acquired.`);
                         if (moment(user.userSetup.nextPhotoTime).isValid()
                             && moment(user.userSetup.nextPhotoTime).isSameOrBefore(moment())) {
                             let msg: Message = this.buildRestoringUserMsg(user.user_id, user.userSetup.nextPhotoTime);
@@ -1224,7 +1218,6 @@ You don't have any setting yet. Please make a choice.`
                         }
                         done(null);
                     }, (err, ret) => {
-                        this.logInfo(`lock[${'user'+user.user_id}] released.`);
                         next(null);
                     });
                 }
