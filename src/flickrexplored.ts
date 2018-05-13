@@ -90,7 +90,6 @@ class FlickrExpored {
                         key: process.env.TELEBOT_OPT_WEBHOOK_KEY
                     }
                 };
-        console.log(telebot_opt);
         this.bot = new telebot(telebot_opt);
         this.userModel = new UserModel().user;
         this.lock = new AsyncLock();
