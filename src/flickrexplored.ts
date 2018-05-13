@@ -5,7 +5,6 @@ import * as htmlparser from 'htmlparser2';
 import * as moment from 'moment';
 import * as mongoose from 'mongoose';
 import * as AsyncLock from 'async-lock';
-import { Config } from './Config';
 import { FlickrConfig } from './flickrconfig';
 import { IImgsCore, IImg } from './iimgscore'
 import { ICBChoice } from './models/icbchoice'
@@ -19,7 +18,10 @@ import { IFlickrPhotoUrl } from './models/iflickrphotourl';
 import { UriOptions, CoreOptions } from 'request';
 import { Moment } from 'moment';
 import { IStats } from './models/istats';
-
+import * as dotenv from 'dotenv';
+//loading env vars.
+dotenv.load();
+//////////////////
 class FlickrExpored {
     private bot: telebot;
     private userModel: Model<IUserModel>;
@@ -41,7 +43,7 @@ class FlickrExpored {
     private lock: AsyncLock;
     /**************************/
     constructor() {
-        this.logInfo(`Starting ${Config.APP_NAME}[PID:${process.pid}]`);
+        this.logInfo(`Starting ${process.env.APP_NAME}[PID:${process.pid}]`);
         process.on('SIGINT', () => {
             this.killProcess();
         });
@@ -52,11 +54,11 @@ class FlickrExpored {
             const self: FlickrExpored = this;
             this.logErr(error);
         });
-        if (Config.USEMONGO) {
+        if (eval(process.env.USEMONGO)) {
             (<any>mongoose).Promise = global.Promise;
-            mongoose.connect(Config.MONGO_URI, { useMongoClient: true });
+            mongoose.connect(process.env.MONGO_URI, { useMongoClient: true });
             mongoose.connection.on('connected', () => {
-                this.logInfo(`Mongoose connection open on:${Config.MONGO_URI}`);
+                this.logInfo(`Mongoose connection open on:${process.env.MONGO_URI}`);
             });
             mongoose.connection.on('error', (err) => {
                 this.logErr(err);
@@ -70,13 +72,18 @@ class FlickrExpored {
             scrapeInProgress: false,
             imgs: []
         };
-        this.bot = new telebot(Config.TELEBOT_OPT);
+        this.bot = new telebot({
+            token: process.env.TELEBOT_OPT_TOKEN,
+            polling: {
+                interval: +(process.env.TELEBOT_OPT_POLLING_INTERVAL)
+            }
+        });
         this.userModel = new UserModel().user;
         this.lock = new AsyncLock();
     }
 
     private killProcess(): void {
-        if (Config.USEMONGO) {
+        if (eval(process.env.USEMONGO)) {
             this.closeMongoConnection();
         }
         this.killBot();
@@ -84,7 +91,7 @@ class FlickrExpored {
 
     private killBot(): void {
         this.bot.deleteWebhook();
-        this.bot.stop(`${Config.APP_NAME} stopped.`);
+        this.bot.stop(`${process.env.APP_NAME} stopped.`);
     }
 
     private closeMongoConnection(): void {
@@ -114,7 +121,7 @@ With @FlickrExplored_bot you can:
         return this.bot.inlineKeyboard(
             [
                 [
-                    this.bot.inlineButton('Do you like this bot?', { url: Config.RATE_URL })
+                    this.bot.inlineButton('Do you like this bot?', { url: process.env.RATE_URL })
                 ]
             ]
         );
@@ -150,7 +157,7 @@ With @FlickrExplored_bot you can:
     private setDBUser(msg: Message): Promise<void> {
         return new Promise<void>(
             async (resolve) => {
-                if (!Config.USEMONGO) {
+                if (!eval(process.env.USEMONGO)) {
                     resolve();
                     return;
                 }
@@ -256,7 +263,7 @@ With @FlickrExplored_bot you can:
                     return;
                 }
 
-                if (Config.USEMONGO) {
+                if (eval(process.env.USEMONGO)) {
                     const self: FlickrExpored = this;
                     this.userModel.update(
                         { user_id: msg.from.id },
@@ -301,7 +308,7 @@ With @FlickrExplored_bot you can:
                     uri: FlickrConfig.ENDPOINT,
                     qs: {
                         method: FlickrConfig.METHODS[2],
-                        api_key: FlickrConfig.API_KEY,
+                        api_key: process.env.FLICKR_KEY,
                         photo_id: img_id,
                         format: FlickrConfig.FORMAT,
                         nojsoncallback: FlickrConfig.NOJSONCB
@@ -400,7 +407,7 @@ With @FlickrExplored_bot you can:
     }
 
     private removeUserDBSetting(msg: Message): void {
-        if (!Config.USEMONGO)
+        if (!eval(process.env.USEMONGO))
             return;
         const self: FlickrExpored = this;
         this.userModel.findOneAndUpdate(
@@ -426,7 +433,7 @@ With @FlickrExplored_bot you can:
     private manageSendError(err: any, msg: Message) {
         if (err && err.error_code && err.error_code == 403) {
             this.logInfo(`${this.getUserName(msg)} has stopped and blocked the bot.`);
-            if (Config.USEMONGO) {
+            if (eval(process.env.USEMONGO)) {
                 const self: FlickrExpored = this;
                 this.userModel.findOneAndUpdate(
                     { user_id: msg.from.id },
@@ -485,7 +492,7 @@ Send your location and get top five photos near you. `;
                 imgsLength: this.imgsObj.imgs.length,
                 scrapeInProgress: this.imgsObj.scrapeInProgress
             };
-            if (!Config.USEMONGO) {
+            if (!eval(process.env.USEMONGO)) {
                 this.logInfo(`Cannot quering mongo due app configuration.`);
                 resolve(JSON.stringify(stats, null, 4));
                 return;
@@ -520,11 +527,11 @@ Send your location and get top five photos near you. `;
                     this.bot.inlineButton(`GitHub repository`, { url: 'https://github.com/marcocelani/FlickrExplored_bot' })
                 ],
                 [
-                    this.bot.inlineButton(`Do you like this bot? Please rate.`, { url: Config.RATE_URL })
+                    this.bot.inlineButton(`Do you like this bot? Please rate.`, { url: process.env.RATE_URL })
                 ]
             ]
         );
-        return this.sendMessage(msg, `${Config.APP_NAME} made by @${Config.TELEGRAM_USERNAME}.`, { replyMarkup: replyMarkup });
+        return this.sendMessage(msg, `${process.env.APP_NAME} made by @${process.env.TELEGRAM_USERNAME}.`, { replyMarkup: replyMarkup });
     }
 
     private getStop(msg: Message): void {
@@ -532,7 +539,7 @@ Send your location and get top five photos near you. `;
             this.sendMessage(msg, 'Stops command not allowed to group.');
             return;
         }
-        if (Config.USEMONGO) {
+        if (eval(process.env.USEMONGO)) {
             const self: FlickrExpored = this;
             this.userModel.update(
                 { user_id: msg.from.id },
@@ -613,7 +620,7 @@ You don't have any setting yet. Please make a choice.`
             this.sendMessage(msg, `Setup command not allowed in groups.`); /* TODO? I don't know. */
             return;
         }
-        if (Config.USEMONGO) {
+        if (eval(process.env.USEMONGO)) {
             const self: FlickrExpored = this;
             this.userModel.findOne({ user_id: msg.from.id },
                 (err, res) => {
@@ -697,7 +704,7 @@ You don't have any setting yet. Please make a choice.`
             uri: FlickrConfig.ENDPOINT,
             qs: {
                 method: FlickrConfig.METHODS[INDEX],
-                api_key: FlickrConfig.API_KEY,
+                api_key: process.env.FLICKR_KEY,
                 text: (query) ? query : '',
                 sort: FlickrConfig.SORT[INDEX],
                 parse_tag: FlickrConfig.PARSE_TAG[INDEX],
@@ -885,11 +892,11 @@ You don't have any setting yet. Please make a choice.`
             return;
         }
         const flickrUrlsArr: Array<string> = [];
-        let dayBefore: number = Config.DAY_BEFORE - this.imgsObj.imgs.length;
+        let dayBefore: number = +(process.env.DAY_BEFORE) - this.imgsObj.imgs.length;
         if (dayBefore < 0) {
             this.logErr(`dayBefore:${dayBefore}. Negative values found. I'm restoring imgs array.`);
             this.imgsObj.imgs = [];
-            dayBefore = Config.DAY_BEFORE;
+            dayBefore = +(process.env.DAY_BEFORE);
         }
         if (dayBefore != 0) {
             this.logInfo(`imgs needs update. dayBefore:${dayBefore}`);
@@ -1003,7 +1010,7 @@ You don't have any setting yet. Please make a choice.`
     }
 
     private updateUserDBSetting(msg: Message, userObj: IUserSetup): void {
-        if (!Config.USEMONGO)
+        if (!(eval(process.env.USEMONGO)))
             return;
         this.userModel.findOneAndUpdate(
             { user_id: msg.from.id },
@@ -1115,7 +1122,7 @@ You don't have any setting yet. Please make a choice.`
     }
 
     private restoreUsersSetting() {
-        if (!Config.USEMONGO)
+        if (!eval(process.env.USEMONGO))
             return;
         this.userModel.find(
             { 'userSetup': { $ne: null } },
@@ -1231,14 +1238,14 @@ You don't have any setting yet. Please make a choice.`
         setInterval(() => {
             this.removeFirstItem()
         },
-            Config.IMGS_ARR_REFRESH
+            eval(process.env.IMGS_ARR_REFRESH)
         );
         setInterval(() => {
             this.scrapeImg()
-        }, Config.IMGS_REFRESH_TIME);
+        }, eval(process.env.IMGS_REFRESH_TIME));
         setInterval(() => {
             this.checkUsersSetting()
-        }, Config.USERS_SETTING_CHECK);
+        }, eval(process.env.USERS_SETTING_CHECK));
     }
 
     init() {

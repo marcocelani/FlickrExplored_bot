@@ -1,7 +1,6 @@
 import { Document, Schema, Model } from "mongoose";
 import * as mongoose from 'mongoose';
 import { Moment } from "moment";
-import { Config } from "../Config";
 export interface IUserSetup extends Document {
     type: string;
     nextPhotoTime: Date;
@@ -53,7 +52,7 @@ export class UserModel {
             count: Number,
             is_stopped: Boolean,
             userSetup: this.userSetupSchema
-        }, { collection: Config.MONGO_USR_COLL, timestamps: {} });
+        }, { collection: process.env.MONGO_USR_COLL, timestamps: {} });
         /* model */
         this.userModel = mongoose.model<IUserModel>(UserModel.UserName, this.userSchema);
     }

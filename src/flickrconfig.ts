@@ -1,5 +1,3 @@
-import { Config } from "./Config";
-
 export class FlickrConfig {
     public static FLICKR_KEY: string = '';
     public static ENDPOINT: string = 'https://api.flickr.com/services/rest/';
@@ -8,7 +6,6 @@ export class FlickrConfig {
         'flickr.photos.getInfo',
         'flickr.photos.search'
     ];
-    public static API_KEY: string = Config.FLICKR_KEY;
     public static EXTRAS: Array<string> = ['path_alias',
         '',
         '',
