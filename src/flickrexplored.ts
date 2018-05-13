@@ -72,7 +72,7 @@ class FlickrExpored {
             scrapeInProgress: false,
             imgs: []
         };
-        const telebot_opt: telebot.config = eval(process.env.TELEBOT_OPT_USE_WEBHOOK) === true
+        const telebot_opt: telebot.config = eval(process.env.TELEBOT_OPT_USE_WEBHOOK) === false
             ?   { 
                     token: process.env.TELEBOT_OPT_TOKEN,
                     polling: {
@@ -90,6 +90,7 @@ class FlickrExpored {
                         key: process.env.TELEBOT_OPT_WEBHOOK_KEY
                     }
                 };
+        console.log(telebot_opt);
         this.bot = new telebot(telebot_opt);
         this.userModel = new UserModel().user;
         this.lock = new AsyncLock();
