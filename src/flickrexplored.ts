@@ -72,12 +72,25 @@ class FlickrExpored {
             scrapeInProgress: false,
             imgs: []
         };
-        this.bot = new telebot({
-            token: process.env.TELEBOT_OPT_TOKEN,
-            polling: {
-                interval: +(process.env.TELEBOT_OPT_POLLING_INTERVAL)
-            }
-        });
+        const telebot_opt: telebot.config = eval(process.env.TELEBOT_OPT_USE_WEBHOOK) === true
+            ?   { 
+                    token: process.env.TELEBOT_OPT_TOKEN,
+                    polling: {
+                        interval: eval(process.env.TELEBOT_OPT_POLLING_INTERVAL)
+                    }
+                }
+            :
+                {
+                    token: process.env.TELEBOT_OPT_TOKEN,
+                    webhook: {
+                        url: process.env.TELEBOT_OPT_WEBHOOK_URL,
+                        host: process.env.TELEBOT_OPT_WEBHOOK_HOST,
+                        port: eval(process.env.TELEBOT_OPT_WEBHOOK_PORT),
+                        cert: process.env.TELEBOT_OPT_WEBHOOK_CERT,
+                        key: process.env.TELEBOT_OPT_WEBHOOK_KEY
+                    }
+                };
+        this.bot = new telebot(telebot_opt);
         this.userModel = new UserModel().user;
         this.lock = new AsyncLock();
     }
